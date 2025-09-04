@@ -15,7 +15,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
-import torchvision.transforms  as T
+import torchvision.transforms as T
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import cv2
@@ -26,7 +26,8 @@ from thop import profile
 
 from segment_anything_training.build_IRSAM import build_sam_IRSAM
 
-from utils.dataloader import get_im_gt_name_dict, create_dataloaders, RandomHFlip, Resize, LargeScaleJitter, get_im_gt_name_list
+from utils.dataloader import get_im_gt_name_dict, create_dataloaders, RandomHFlip, Resize, LargeScaleJitter, \
+    get_im_gt_name_list
 from utils.metrics import SigmoidMetric, SamplewiseSigmoidMetric
 from utils.metric import PD_FA, ROCMetric
 from utils.loss_mask import DICE_loss
@@ -34,6 +35,7 @@ from utils.log import initialize_logger
 import utils.misc as misc
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('HQ-SAM', add_help=False)
@@ -54,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=1, type=int)
+    parser.add_argument('--batch_size_train', default=16, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
 
@@ -95,6 +97,7 @@ def main(valid_datasets, args):
 
     optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate)
     criterion = DICE_loss  # Assuming you use DICE_loss for segmentation tasks
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     # --- Step 3: Train or Evaluate ---
     if args.eval:
         if args.restore_model:
@@ -115,40 +118,37 @@ def main(valid_datasets, args):
                 net.load_state_dict(torch.load(args.restore_model))
             else:
                 net.load_state_dict(torch.load(args.restore_model, map_location="cpu"))
-
-        # Prepare to store the results
-        training_loss_list = []
-        evaluation_metrics_list = []
-
+        best_iou = 0
         # Loop for training and evaluating for 20 epochs
-        for epoch in range(1, 21):  # 20 epochs
+        for epoch in range(1, 501):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
-            training_loss_list.append(train_metrics['loss'])
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")
             eval_metrics = evaluate(net, valid_dataloaders)
 
-            # Store evaluation metrics
-            evaluation_metrics_list.append(eval_metrics)
-
             # Logging the results
-            print(f"Epoch {epoch} results: IoU={eval_metrics['iou']}, nIoU={eval_metrics['niou']}, PD={eval_metrics['pd']}, FA={eval_metrics['fa']}")
+            print(
+                f"Epoch {epoch} results: IoU={eval_metrics['iou']}, nIoU={eval_metrics['niou']}, PD={eval_metrics['pd']}, FA={eval_metrics['fa']}")
             print(f"Training loss for epoch {epoch}: {train_metrics['loss']}")
 
             # Save model checkpoint if necessary
-            if epoch % args.model_save_fre == 0:
-                checkpoint_path = os.path.join(args.output, f"checkpoint_epoch_{epoch}.pth")
+            if eval_metrics['iou'] > best_iou:
+                best_iou = eval_metrics['iou']
+                checkpoint_path = os.path.join(args.output, f"checkpoint_epoch_{epoch}_{best_iou}.pth")
                 torch.save(net.state_dict(), checkpoint_path)
                 print(f"Model saved at {checkpoint_path}")
 
-        # Optionally save loss and metrics history to a file
-        np.savetxt(os.path.join(args.output, 'training_loss.txt'), training_loss_list, fmt='%.6f')
-        np.savetxt(os.path.join(args.output, 'evaluation_metrics.txt'), evaluation_metrics_list, fmt='%.6f')
+            output_path = os.path.join(args.output, 'evaluation_metrics.txt')
+            with open(output_path, 'a') as f:
+                line = f"epoch: {epoch}, loss: {train_metrics['loss']}, "
+                line += ", ".join([f"{k}: {v:.6f}" for k, v in eval_metrics.items()])
+                f.write(line + "\n")
 
         print("Training complete!")
+
 
 def evaluate(net, valid_dataloaders):
     net.eval()
@@ -172,7 +172,7 @@ def evaluate(net, valid_dataloaders):
             inputs_val = data_val['image']  # Tensor with shape [B, 3, H, W]
             labels_ori = data_val['label']  # Ground truth labels, shape [B, H, W]
             shapes_val = data_val['shape']  # Image shapes (original sizes)
-            
+
             # Additional fields (if present in the dataset)
             point_coords = data_val.get('point_coords', None)  # Optional point coordinates
             point_labels = data_val.get('point_labels', None)  # Optional point labels
@@ -188,14 +188,14 @@ def evaluate(net, valid_dataloaders):
             batched_input = []
             for b_i in range(inputs_val.shape[0]):
                 dict_input = dict()
-                dict_input['image'] = inputs_val[b_i] # Single image in the batch
+                dict_input['image'] = inputs_val[b_i]  # Single image in the batch
                 dict_input['original_size'] = shapes_val[b_i]
-                
+
                 # Add optional inputs if they exist
                 if point_coords is not None:
                     dict_input['point_coords'] = point_coords[b_i]  # Add point coordinates
                 if point_labels is not None:
-                    dict_input['point_labels'] = point_labels[b_i] # Add point labels
+                    dict_input['point_labels'] = point_labels[b_i]  # Add point labels
                 if boxes is not None:
                     dict_input['boxes'] = boxes[b_i]  # Add bounding box
                 if mask_inputs is not None:
@@ -216,13 +216,14 @@ def evaluate(net, valid_dataloaders):
             _, nIoU = nIoU_metric.get()
 
             tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
-                                    % (IoU, nIoU, PD[0], FA[0]))
-            
+                                 % (IoU, nIoU, PD[0], FA[0]))
+
         metric['iou'] = IoU
         metric['niou'] = nIoU
         metric['pd'] = PD[0]
         metric['fa'] = FA[0]
     return metric
+
 
 def train(net, train_dataloaders, optimizer, criterion):
     net.train()
@@ -232,11 +233,11 @@ def train(net, train_dataloaders, optimizer, criterion):
     nIoU_metric = SamplewiseSigmoidMetric(1, score_thresh=0.5)
 
     ROC = ROCMetric(1, 10)
-    Pd_Fa = PD_FA(1, 10)
+    # Pd_Fa = PD_FA(1, 10)
 
     IoU_metric.reset()
     nIoU_metric.reset()
-    Pd_Fa.reset()
+    # Pd_Fa.reset()
 
     epoch_loss = 0  # To track the loss for this epoch
     tbar = tqdm(train_dataloaders)
@@ -245,7 +246,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         inputs_val = data_train['image']  # Tensor with shape [B, 3, H, W]
         labels_ori = data_train['label']  # Ground truth labels, shape [B, H, W]
         shapes_val = data_train['shape']  # Image shapes (original sizes)
-        
+
         # Additional fields (if present in the dataset)
         point_coords = data_train.get('point_coords', None)  # Optional point coordinates
         point_labels = data_train.get('point_labels', None)  # Optional point labels
@@ -261,14 +262,14 @@ def train(net, train_dataloaders, optimizer, criterion):
         batched_input = []
         for b_i in range(inputs_val.shape[0]):
             dict_input = dict()
-            dict_input['image'] = inputs_val[b_i] # Single image in the batch
+            dict_input['image'] = inputs_val[b_i]  # Single image in the batch
             dict_input['original_size'] = shapes_val[b_i]
-            
+
             # Add optional inputs if they exist
             if point_coords is not None:
                 dict_input['point_coords'] = point_coords[b_i]  # Add point coordinates
             if point_labels is not None:
-                dict_input['point_labels'] = point_labels[b_i] # Add point labels
+                dict_input['point_labels'] = point_labels[b_i]  # Add point labels
             if boxes is not None:
                 dict_input['boxes'] = boxes[b_i]  # Add bounding box
             if mask_inputs is not None:
@@ -290,14 +291,14 @@ def train(net, train_dataloaders, optimizer, criterion):
         # Update metrics
         IoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
         nIoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
-        Pd_Fa.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
+        # Pd_Fa.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
 
-        FA, PD = Pd_Fa.get(len(train_dataloaders))
+        # FA, PD = Pd_Fa.get(len(train_dataloaders))
         _, IoU = IoU_metric.get()
         _, nIoU = nIoU_metric.get()
 
-        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
-                        % (loss.item(), IoU, nIoU, PD[0], FA[0]))
+        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f'
+                             % (loss.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
 
     # Calculate average loss for the epoch
     epoch_loss /= len(train_dataloaders)
@@ -305,16 +306,15 @@ def train(net, train_dataloaders, optimizer, criterion):
     # Get final metrics for this epoch
     _, IoU = IoU_metric.get()
     _, nIoU = nIoU_metric.get()
-    FA, PD = Pd_Fa.get(len(train_dataloaders))
+    # FA, PD = Pd_Fa.get(len(train_dataloaders))
 
     metric['loss'] = epoch_loss
     metric['iou'] = IoU
     metric['niou'] = nIoU
-    metric['pd'] = PD[0]
-    metric['fa'] = FA[0]
+    # metric['pd'] = PD[0]
+    # metric['fa'] = FA[0]
 
     return metric
-
 
 
 if __name__ == "__main__":

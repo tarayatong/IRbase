@@ -1,3 +1,7 @@
+/home/liujing/tyf/IRbase/datasets
+*.pth
+/home/liujing/tyf/IRbase/workdir
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
