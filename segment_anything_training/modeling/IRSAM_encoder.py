@@ -16,6 +16,7 @@ from timm.models.layers import DropPath as TimmDropPath, \
     to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 from typing import Tuple
+from .PMD import PMD_features
 
 
 class Conv2d_BN(torch.nn.Sequential):
@@ -537,6 +538,10 @@ class TinyViT(nn.Module):
                                                 sum(depths))]  # stochastic depth decay rule
 
         # build layers
+        self.pmd1 = PMD_features(in_dims=3, out_dims=embed_dims[0])
+        self.pmd2 = PMD_features(in_dims=embed_dims[0], out_dims=embed_dims[0])
+        self.linear1 = nn.Conv2d(embed_dims[0] *2, embed_dims[0], kernel_size=1)
+        self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
             kwargs = dict(dim=embed_dims[i_layer],
@@ -606,6 +611,8 @@ class TinyViT(nn.Module):
                 p.lr_scale = scale
 
         self.patch_embed.apply(lambda x: _set_lr_scale(x, lr_scales[0]))
+        self.linear1.apply(lambda x: _set_lr_scale(x, lr_scales[0]))
+        self.linear2.apply(lambda x: _set_lr_scale(x, lr_scales[0]))
         i = 0
         for layer in self.layers:
             for block in layer.blocks:
@@ -643,7 +650,10 @@ class TinyViT(nn.Module):
     def forward_features(self, x):
         # x: (N, C, H, W)   
         size = self.img_size // self.patch_size  
+        f1 = self.pmd1(x)
         x = self.patch_embed(x)
+        x = self.linear1(torch.cat((x, f1), dim=1))
+        f2 = self.pmd2(x)
 
         x = self.layers[0](x)
         start_i = 1
@@ -652,6 +662,8 @@ class TinyViT(nn.Module):
             x = layer(x)
             if i == 1:
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
+                f2 = f2.flatten(2).transpose(1, 2)
+                x = self.linear2(torch.cat((x, f2), dim=-1))
         B, _, C = x.size()
         x = x.view(B, size, size, C)
         x = x.permute(0, 3, 1, 2)

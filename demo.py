@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=16, type=int)
+    parser.add_argument('--batch_size_train', default=4, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
 
@@ -70,6 +70,7 @@ def get_args_parser():
 
 def main(valid_datasets, args):
     # --- Step 1: Valid dataset ---
+    print("开始创建数据加载器...")
     print("--- create train dataloader ---")
     train_im_gt_list = get_im_gt_name_list(valid_datasets, flag="train")
     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
@@ -91,7 +92,9 @@ def main(valid_datasets, args):
     print(len(valid_dataloaders), " valid dataloaders created")
 
     # --- Step 2: Load pretrained Network---
+    print("开始加载模型...")
     net = build_sam_IRSAM(checkpoint=args.checkpoint)
+    print("模型加载完成")
     if torch.cuda.is_available():
         net.cuda()
 
@@ -123,7 +126,9 @@ def main(valid_datasets, args):
         for epoch in range(1, 501):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
             # Training step
+            print(f"开始训练 Epoch {epoch}...")
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
+            print(f"Epoch {epoch} 训练完成")
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")
@@ -203,7 +208,9 @@ def evaluate(net, valid_dataloaders):
 
                 batched_input.append(dict_input)
 
+            print(f"开始前向传播，批次大小: {len(batched_input)}")
             masks, edges = net(batched_input)
+            print("前向传播完成")
 
             torch.cuda.synchronize()
 
@@ -226,9 +233,11 @@ def evaluate(net, valid_dataloaders):
 
 
 def train(net, train_dataloaders, optimizer, criterion):
+    print("进入训练函数...")
     net.train()
     metric = dict()
 
+    print("初始化评估指标...")
     IoU_metric = SigmoidMetric()
     nIoU_metric = SamplewiseSigmoidMetric(1, score_thresh=0.5)
 
@@ -240,12 +249,18 @@ def train(net, train_dataloaders, optimizer, criterion):
     # Pd_Fa.reset()
 
     epoch_loss = 0  # To track the loss for this epoch
+    print(f"开始遍历训练数据，总共有 {len(train_dataloaders)} 个batch...")
     tbar = tqdm(train_dataloaders)
+    batch_count = 0
     for data_train in tbar:
+        batch_count += 1
+        print(f"处理第 {batch_count} 个batch...")
+        
         # Assuming data_val is now a dictionary with the required fields.
         inputs_val = data_train['image']  # Tensor with shape [B, 3, H, W]
         labels_ori = data_train['label']  # Ground truth labels, shape [B, H, W]
         shapes_val = data_train['shape']  # Image shapes (original sizes)
+        print(f"数据加载完成，input shape: {inputs_val.shape}")
 
         # Additional fields (if present in the dataset)
         point_coords = data_train.get('point_coords', None)  # Optional point coordinates
@@ -254,11 +269,13 @@ def train(net, train_dataloaders, optimizer, criterion):
         mask_inputs = data_train.get('mask_inputs', None)  # Optional mask inputs
 
         # Move data to GPU if available
+        print("移动数据到GPU...")
         if torch.cuda.is_available():
             inputs_val = inputs_val.cuda()
             labels_ori = labels_ori.cuda()
 
         # Create the batched input for the model
+        print("创建批处理输入...")
         batched_input = []
         for b_i in range(inputs_val.shape[0]):
             dict_input = dict()
@@ -278,8 +295,10 @@ def train(net, train_dataloaders, optimizer, criterion):
             batched_input.append(dict_input)
 
         # Forward pass
+        print("开始前向传播...")
         optimizer.zero_grad()
         masks, edges = net(batched_input)
+        print("前向传播完成")
 
         # Compute loss (use your specific loss function here)
         loss, _ = criterion(masks, labels_ori)
