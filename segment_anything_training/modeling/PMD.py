@@ -180,28 +180,16 @@ class Get_gradient_nopadding(nn.Module):
         self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False)
 
     def forward(self, x):
-        print(f"Get_gradient_nopadding输入: {x.shape}, 设备: {x.device}")
-        # 优化：避免逐通道处理，使用分组卷积
-        B, C, H, W = x.shape
-        
-        # 将所有通道展开为batch维度进行并行处理
-        x_reshaped = x.view(B * C, 1, H, W)
-        
-        # 使用分组卷积并行处理所有通道
-        weight_v_expanded = self.weight_v.repeat(C, 1, 1, 1)
-        weight_h_expanded = self.weight_h.repeat(C, 1, 1, 1)
-        
-        x_v = F.conv2d(x_reshaped, weight_v_expanded, padding=1, groups=C)
-        x_h = F.conv2d(x_reshaped, weight_h_expanded, padding=1, groups=C)
-        
-        # 计算梯度幅度
-        x_grad = torch.sqrt(torch.pow(x_v, 2) + torch.pow(x_h, 2) + 1e-6)
-        
-        # 重新reshape回原来的形状
-        x_grad = x_grad.view(B, C, H, W)
-        print(f"Get_gradient_nopadding输出: {x_grad.shape}, 设备: {x_grad.device}")
-        
-        return x_grad
+        x_list = []
+        for i in range(x.shape[1]):
+            x_i = x[:, i]
+            x_i_v = F.conv2d(x_i.unsqueeze(1), self.weight_v, padding=1)
+            x_i_h = F.conv2d(x_i.unsqueeze(1), self.weight_h, padding=1)
+            x_i = torch.sqrt(torch.pow(x_i_v, 2) + torch.pow(x_i_h, 2) + 1e-6)
+            x_list.append(x_i)
+
+        x = torch.cat(x_list, dim=1)
+        return x
 
 
 class Get_curvature(nn.Module):
@@ -326,8 +314,6 @@ class PMD_features(nn.Module):
         # self.PMD_head = Get_curvature()
         self.wavelet_decomp = MBWTConv2d(in_dims, out_dims, stride=4)
         self.PMD_head = Get_gradient_nopadding()
-        # 添加1x1卷积控制通道数为相加的一半
-        self.channel_reduce = nn.Conv2d(out_dims, out_dims // 2, kernel_size=1)
         # self.feature_ext = FeatureEncoder(out_dims)
         
         # 为所有参数设置lr_scale属性
@@ -340,14 +326,8 @@ class PMD_features(nn.Module):
             p.param_name = name
 
     def forward(self, images):
-        print(f"PMD输入形状: {images.shape}, 设备: {images.device}")
         wavelet_images = self.wavelet_decomp(images)
-        print(f"小波分解后形状: {wavelet_images.shape}, 设备: {wavelet_images.device}")
         PMD_images = self.PMD_head(wavelet_images)
-        print(f"PMD处理后形状: {PMD_images.shape}, 设备: {PMD_images.device}")
-        # 通道数减半
-        PMD_images = self.channel_reduce(PMD_images)
-        print(f"通道减半后形状: {PMD_images.shape}, 设备: {PMD_images.device}")
         # PMD_feature = self.feature_ext(PMD_images)
 
         return PMD_images
