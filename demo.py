@@ -97,7 +97,7 @@ def main(valid_datasets, args):
 
     optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate)
     criterion = DICE_loss  # Assuming you use DICE_loss for segmentation tasks
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    os.makedirs(args.output, exist_ok=True)
     # --- Step 3: Train or Evaluate ---
     if args.eval:
         if args.restore_model:
