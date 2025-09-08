@@ -1,5 +1,6 @@
 datasets/
 *.pth
+workdirs/
 workdir/
 *.png
 

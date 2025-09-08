@@ -137,7 +137,7 @@ def main(valid_datasets, args):
             # Save model checkpoint if necessary
             if eval_metrics['iou'] > best_iou:
                 best_iou = eval_metrics['iou']
-                checkpoint_path = os.path.join(args.output, f"checkpoint_epoch_{epoch}_{best_iou}.pth")
+                checkpoint_path = os.path.join(args.output, f"best.pth")
                 torch.save(net.state_dict(), checkpoint_path)
                 print(f"Model saved at {checkpoint_path}")
 
@@ -285,7 +285,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         masks, edges = net(batched_input)
 
         # Compute loss (use your specific loss function here)
-        loss, _ = criterion(masks, labels_ori)
+        loss, _ = criterion(masks, labels_ori/255.)
         loss.backward()
         optimizer.step()
 
