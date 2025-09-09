@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=4, type=int)
+    parser.add_argument('--batch_size_train', default=8, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
 
@@ -143,7 +143,7 @@ def main(valid_datasets, args):
 
             output_path = os.path.join(args.output, 'evaluation_metrics.txt')
             with open(output_path, 'a') as f:
-                line = f"epoch: {epoch}, loss: {train_metrics['loss']}, "
+                line = f"epoch: {epoch}, loss: {train_metrics['loss']}, train_iou: {train_metrics['iou']}, train_niou: {train_metrics['niou']}"
                 line += ", ".join([f"{k}: {v:.6f}" for k, v in eval_metrics.items()])
                 f.write(line + "\n")
 
@@ -249,6 +249,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         inputs_val = data_train['image']  # Tensor with shape [B, 3, H, W]
         labels_ori = data_train['label']  # Ground truth labels, shape [B, H, W]
         shapes_val = data_train['shape']  # Image shapes (original sizes)
+        edge_labels_ori = data_train['edge']  # Ground truth edge labels, shape [B, H, W]
 
         # Additional fields (if present in the dataset)
         point_coords = data_train.get('point_coords', None)  # Optional point coordinates
@@ -285,7 +286,10 @@ def train(net, train_dataloaders, optimizer, criterion):
         masks, edges = net(batched_input)
 
         # Compute loss (use your specific loss function here)
-        loss, _ = criterion(masks, labels_ori/255.)
+        loss_iou, loss_dice = criterion(masks, labels_ori/255.)
+        loss_bce = F.binary_cross_entropy(masks, labels_ori/255.)+F.binary_cross_entropy(edges, edge_labels_ori/255.)
+        loss = loss_iou+loss_dice+10*loss_bce
+
         loss.backward()
         optimizer.step()
 
