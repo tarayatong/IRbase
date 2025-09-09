@@ -143,7 +143,7 @@ def main(valid_datasets, args):
 
             output_path = os.path.join(args.output, 'evaluation_metrics.txt')
             with open(output_path, 'a') as f:
-                line = f"epoch: {epoch}, loss: {train_metrics['loss']}, train_iou: {train_metrics['iou']}, train_niou: {train_metrics['niou']}"
+                line = f"epoch: {epoch}, loss: {train_metrics['loss']}, train_iou: {train_metrics['iou']}, train_niou: {train_metrics['niou']}, "
                 line += ", ".join([f"{k}: {v:.6f}" for k, v in eval_metrics.items()])
                 f.write(line + "\n")
 
@@ -261,6 +261,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         if torch.cuda.is_available():
             inputs_val = inputs_val.cuda()
             labels_ori = labels_ori.cuda()
+            edge_labels_ori = edge_labels_ori.cuda()
 
         # Create the batched input for the model
         batched_input = []
@@ -286,9 +287,17 @@ def train(net, train_dataloaders, optimizer, criterion):
         masks, edges = net(batched_input)
 
         # Compute loss (use your specific loss function here)
-        loss_iou, loss_dice = criterion(masks, labels_ori/255.)
-        loss_bce = F.binary_cross_entropy(masks, labels_ori/255.)+F.binary_cross_entropy(edges, edge_labels_ori/255.)
-        loss = loss_iou+loss_dice+10*loss_bce
+        # Ensure masks and edges are in [0,1] range using sigmoid
+        masks_sigmoid = torch.sigmoid(masks)
+        edges_sigmoid = torch.sigmoid(edges)
+        
+        # Ensure target labels are in [0,1] range and have valid values
+        labels_normalized = torch.clamp(labels_ori/255., 0.0, 1.0)
+        edge_labels_normalized = torch.clamp(edge_labels_ori/255., 0.0, 1.0)
+        
+        loss_iou, loss_dice = criterion(masks, labels_normalized)
+        loss_bce = F.binary_cross_entropy(edges_sigmoid, edge_labels_normalized)
+        loss = loss_dice+loss_bce
 
         loss.backward()
         optimizer.step()
@@ -304,8 +313,8 @@ def train(net, train_dataloaders, optimizer, criterion):
         _, IoU = IoU_metric.get()
         _, nIoU = nIoU_metric.get()
 
-        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f'
-                             % (loss.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
+        tbar.set_description('Loss:%.8lf, iou_loss:%.8lf, dice_loss:%.8lf, bce_loss:%.8lf, IoU:%f, nIoU:%f'
+                             % (loss.item(), loss_iou.item(), loss_dice.item(), loss_bce.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
 
     # Calculate average loss for the epoch
     epoch_loss /= len(train_dataloaders)
