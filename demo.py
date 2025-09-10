@@ -296,7 +296,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         edge_labels_normalized = torch.clamp(edge_labels_ori/255., 0.0, 1.0)
         
         loss_iou, loss_dice = criterion(masks, labels_normalized)
-        loss_bce = F.binary_cross_entropy(edges_sigmoid, edge_labels_normalized)
+        loss_bce = F.binary_cross_entropy(edges_sigmoid, labels_normalized)
         # loss_edge_iou, loss_edge_dice = criterion(edges, labels_normalized)
         loss = loss_dice+10*loss_bce
 

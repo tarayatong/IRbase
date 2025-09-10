@@ -28,5 +28,5 @@ To evaluate IRSAM on various dataset, modify the dataset path in the train-IRSAM
 ### Example
 ```
 python train_IRSAM.py --output workdirs/your_workdir --checkpoint your_checkpoint --eval
-python demo.py --output workdirs/IRSAM_IRSTD --checkpoint mobile_sam.pt
+python demo.py --output workdirs/multi_interm --checkpoint mobile_sam.pt
 ```
