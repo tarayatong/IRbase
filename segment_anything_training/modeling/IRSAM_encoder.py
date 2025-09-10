@@ -649,17 +649,21 @@ class TinyViT(nn.Module):
 
     def forward_features(self, x):
         # x: (N, C, H, W)   
+        # interm_embedding = []
         size = self.img_size // self.patch_size  
         f1 = self.pmd1(x)
         x = self.patch_embed(x)
         x = self.linear1(torch.cat((x, f1), dim=1))
+        # interm_embedding.append(x)
         f2 = self.pmd2(x)
 
         x = self.layers[0](x)
+        # interm_embedding.append(x)
         start_i = 1
         for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
             x = layer(x)
+            # interm_embedding.append(x.reshape(x.shape[0], self.img_size//2**(i+3), self.img_size//2**(i+1), -1))
             if i == 1:
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)

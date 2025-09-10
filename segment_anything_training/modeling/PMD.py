@@ -313,7 +313,8 @@ class PMD_features(nn.Module):
         super(PMD_features, self).__init__()
         # self.PMD_head = Get_curvature()
         self.wavelet_decomp = MBWTConv2d(in_dims, out_dims, stride=4)
-        self.PMD_head = Get_gradient_nopadding()
+        # self.PMD_head = Get_gradient_nopadding()
+        self.PMD_head = Get_curvature()
         # self.feature_ext = FeatureEncoder(out_dims)
         
         # 为所有参数设置lr_scale属性

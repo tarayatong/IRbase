@@ -297,7 +297,8 @@ def train(net, train_dataloaders, optimizer, criterion):
         
         loss_iou, loss_dice = criterion(masks, labels_normalized)
         loss_bce = F.binary_cross_entropy(edges_sigmoid, edge_labels_normalized)
-        loss = loss_dice+loss_bce
+        # loss_edge_iou, loss_edge_dice = criterion(edges, labels_normalized)
+        loss = loss_dice+10*loss_bce
 
         loss.backward()
         optimizer.step()
@@ -313,7 +314,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         _, IoU = IoU_metric.get()
         _, nIoU = nIoU_metric.get()
 
-        tbar.set_description('Loss:%.8lf, iou_loss:%.8lf, dice_loss:%.8lf, bce_loss:%.8lf, IoU:%f, nIoU:%f'
+        tbar.set_description('Loss:%.8lf, iou_loss:%.8lf, dice_loss:%.8lf, loss_bce:%.8lf, IoU:%f, nIoU:%f'
                              % (loss.item(), loss_iou.item(), loss_dice.item(), loss_bce.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
 
     # Calculate average loss for the epoch

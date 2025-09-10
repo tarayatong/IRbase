@@ -100,6 +100,7 @@ class Sam(nn.Module):
         input_images = torch.cat([self.preprocess(x["image"]) for x in batched_input], dim=0)
         
         image_embeddings, edge_embeddings = self.image_encoder(input_images)
+      
         # print("max:", torch.max(image_embeddings[0][211]), " min:", torch.min(image_embeddings[0][211]))
         # print(image_embeddings.shape)
         #
