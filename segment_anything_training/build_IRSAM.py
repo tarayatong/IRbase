@@ -9,7 +9,7 @@ from .modeling.IRSAM_edge import Sam as EdgeIRSAM
 
 def build_sam_IRSAM(checkpoint=None):
     prompt_embed_dim = 256
-    image_size = 512
+    image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
     mobile_sam = EdgeIRSAM(

@@ -308,6 +308,7 @@ class OnlineDataset(Dataset):
             im = np.repeat(im, 3, axis=2)
 
         edge = cv2.Canny(gt, 100, 200)
+        img_edge = cv2.Canny(im, 100, 200)
         im = torch.tensor(im.copy(), dtype=torch.float32)
         im = torch.transpose(torch.transpose(im, 1, 2), 0, 1)
         gt = torch.unsqueeze(torch.tensor(gt, dtype=torch.float32), 0)
@@ -319,7 +320,8 @@ class OnlineDataset(Dataset):
             "label": gt,
             "edge": edge,
             "shape": torch.tensor(im.shape[-2:]),
-            "path": self.dataset["im_path"][idx]
+            "path": self.dataset["im_path"][idx],
+            "img_edge": img_edge,
         }
 
         if self.transform:

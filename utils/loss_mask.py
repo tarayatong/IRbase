@@ -90,6 +90,29 @@ def get_uncertain_point_coords_with_randomness(
         )
     return point_coords
 
+def IoU_loss(
+        inputs: torch.Tensor,
+        targets: torch.Tensor,
+        eps = 1e-6,
+):
+    """
+    Compute the IoU loss, similar to generalized IOU for masks
+    """
+    inputs = inputs.view(-1)
+    targets = targets.view(-1)
+
+    intersection = 2 * (inputs * targets).sum()
+    denominator = inputs.sum() + targets.sum()
+
+    inter = (inputs * targets).sum()
+    comb = inputs.sum() + targets.sum() - inter
+
+    loss = 1 - (intersection+eps) / (denominator+eps)
+    loss_iou = 1 - (inter+eps) / (comb+eps)
+
+    return loss.mean(), loss_iou.mean()
+
+
 def DICE_loss(
         inputs: torch.Tensor,
         targets: torch.Tensor,

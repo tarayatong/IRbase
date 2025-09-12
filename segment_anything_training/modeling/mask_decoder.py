@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 from typing import List, Tuple, Type
 
-from .common import LayerNorm2d
+from .common import LayerNorm2d, DySample
 
 
 class MaskDecoder(nn.Module):
@@ -57,6 +57,15 @@ class MaskDecoder(nn.Module):
             nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
             activation(),
         )
+        # self.output_upscaling = nn.Sequential(
+        #     DySample(transformer_dim, style='pl'),
+        #     nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=3, stride=1, padding=1),
+        #     LayerNorm2d(transformer_dim // 4),
+        #     activation(),
+        #     DySample(transformer_dim//4, style='pl'),
+        #     nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=5, stride=1, padding=2),
+        #     activation(),
+        # )
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
                 MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)

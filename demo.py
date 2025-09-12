@@ -30,11 +30,11 @@ from utils.dataloader import get_im_gt_name_dict, create_dataloaders, RandomHFli
     get_im_gt_name_list
 from utils.metrics import SigmoidMetric, SamplewiseSigmoidMetric
 from utils.metric import PD_FA, ROCMetric
-from utils.loss_mask import DICE_loss
+from utils.loss_mask import DICE_loss, IoU_loss
 from utils.log import initialize_logger
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def get_args_parser():
@@ -44,7 +44,7 @@ def get_args_parser():
                         help="Path to the directory where masks and checkpoints will be output")
     parser.add_argument("--model_type", type=str, default="vit_l",
                         help="The type of model to load, in ['vit_h', 'vit_l', 'vit_b']")
-    parser.add_argument("--checkpoint", type=str, required=True,
+    parser.add_argument("--checkpoint", type=str, #required=True,
                         help="The path to the SAM checkpoint to use for mask generation.")
     parser.add_argument("--no_prompt_checkpoint", type=str, default=None,
                         help="The path to the SAM checkpoint trained with no prompt")
@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=8, type=int)
+    parser.add_argument('--batch_size_train', default=6, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
 
@@ -289,16 +289,16 @@ def train(net, train_dataloaders, optimizer, criterion):
         # Compute loss (use your specific loss function here)
         # Ensure masks and edges are in [0,1] range using sigmoid
         masks_sigmoid = torch.sigmoid(masks)
-        edges_sigmoid = torch.sigmoid(edges)
+        # edges_sigmoid = torch.sigmoid(edges)
         
         # Ensure target labels are in [0,1] range and have valid values
         labels_normalized = torch.clamp(labels_ori/255., 0.0, 1.0)
         edge_labels_normalized = torch.clamp(edge_labels_ori/255., 0.0, 1.0)
         
         loss_iou, loss_dice = criterion(masks, labels_normalized)
-        loss_bce = F.binary_cross_entropy(edges_sigmoid, labels_normalized)
-        # loss_edge_iou, loss_edge_dice = criterion(edges, labels_normalized)
-        loss = loss_dice+10*loss_bce
+        loss_bce = F.binary_cross_entropy(edges, labels_normalized)
+        # loss_edge_iou, loss_edge_dice = IoU_loss(edges, labels_normalized)
+        loss = loss_dice#+10*loss_bce
 
         loss.backward()
         optimizer.step()
