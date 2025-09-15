@@ -60,7 +60,7 @@ class PatchEmbed(nn.Module):
     def __init__(self, in_chans, embed_dim, resolution, activation):
         super().__init__()
         img_size: Tuple[int, int] = to_2tuple(resolution)
-        self.patches_resolution = (img_size[0] // 4, img_size[1] // 4)
+        self.patches_resolution = (img_size[0] // 2, img_size[1] // 2)
         self.num_patches = self.patches_resolution[0] * \
                            self.patches_resolution[1]
         self.in_chans = in_chans
@@ -69,7 +69,7 @@ class PatchEmbed(nn.Module):
         self.seq = nn.Sequential(
             Conv2d_BN(in_chans, n // 2, 3, 2, 1),
             activation(),
-            Conv2d_BN(n // 2, n, 3, 2, 1),
+            Conv2d_BN(n // 2, n, 3, 1, 1),
         )
 
     def forward(self, x):
@@ -127,7 +127,7 @@ class PatchMerging(nn.Module):
         self.act = activation()
         self.conv1 = Conv2d_BN(dim, out_dim, 1, 1, 0)
         stride_c = 2
-        if (out_dim == 320 or out_dim == 448 or out_dim == 576):
+        if (out_dim == 320 or out_dim == 448 or out_dim == 576 or out_dim==128):
             stride_c = 1
         self.conv2 = Conv2d_BN(out_dim, out_dim, 3, stride_c, 1, groups=out_dim)
         self.conv3 = Conv2d_BN(out_dim, out_dim, 1, 1, 0)
@@ -514,6 +514,7 @@ class TinyViT(nn.Module):
                  mbconv_expand_ratio=4.0,
                  local_conv_size=3,
                  layer_lr_decay=1.0,
+                 patch_size=4,
                  ):
         super().__init__()
         self.img_size = img_size
@@ -521,10 +522,9 @@ class TinyViT(nn.Module):
         self.depths = depths
         self.num_layers = len(depths)
         self.mlp_ratio = mlp_ratio
-        self.patch_size = 16
+        self.patch_size = patch_size
 
         activation = nn.GELU
-
         self.patch_embed = PatchEmbed(in_chans=in_chans,
                                       embed_dim=embed_dims[0],
                                       resolution=img_size,
@@ -543,10 +543,11 @@ class TinyViT(nn.Module):
         self.linear1 = nn.Conv2d(embed_dims[0] *2, embed_dims[0], kernel_size=1)
         self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
+        self.layers_stride = [1,1,2,2]
         for i_layer in range(self.num_layers):
             kwargs = dict(dim=embed_dims[i_layer],
-                          input_resolution=(patches_resolution[0] // (2 ** (i_layer - 1 if i_layer == 3 else i_layer)),
-                                            patches_resolution[1] // (2 ** (i_layer - 1 if i_layer == 3 else i_layer))),
+                          input_resolution=(patches_resolution[0] // (2 ** (self.layers_stride[i_layer]-1)),
+                                            patches_resolution[1] // (2 ** (self.layers_stride[i_layer]-1))),
                           depth=depths[i_layer],
                           drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
                           downsample=PatchMerging if (
@@ -660,6 +661,8 @@ class TinyViT(nn.Module):
         for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
             x = layer(x)
+            # if i == 0:
+            #     interm_embedding = x.reshape(x.shape[0], size, size, -1)
             if i == 1:
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)

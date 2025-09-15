@@ -34,7 +34,7 @@ from utils.loss_mask import DICE_loss
 from utils.log import initialize_logger
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def get_args_parser():

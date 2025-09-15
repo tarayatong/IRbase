@@ -312,7 +312,7 @@ class PMD_features(nn.Module):
     def __init__(self, in_dims, out_dims):
         super(PMD_features, self).__init__()
         # self.PMD_head = Get_curvature()
-        self.wavelet_decomp = MBWTConv2d(in_dims, out_dims, stride=4)
+        self.wavelet_decomp = MBWTConv2d(in_dims, out_dims, stride=2)
         self.PMD_head = Get_gradient_nopadding()
         # self.feature_ext = FeatureEncoder(out_dims)
         

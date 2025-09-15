@@ -10,7 +10,8 @@ from .modeling.IRSAM_edge import Sam as EdgeIRSAM
 def build_sam_IRSAM(checkpoint=None):
     prompt_embed_dim = 256
     image_size = 512
-    vit_patch_size = 16
+    print("input_size:", image_size)
+    vit_patch_size = 4
     image_embedding_size = image_size // vit_patch_size
     mobile_sam = EdgeIRSAM(
             image_encoder=EdgeEncoder(img_size=image_size, in_chans=3, num_classes=1000,
@@ -24,7 +25,8 @@ def build_sam_IRSAM(checkpoint=None):
                 use_checkpoint=False,
                 mbconv_expand_ratio=4.0,
                 local_conv_size=3,
-                layer_lr_decay=0.8
+                layer_lr_decay=0.8, 
+                patch_size=vit_patch_size
             ),
             prompt_encoder=PromptEncoder(
                 embed_dim=prompt_embed_dim,
