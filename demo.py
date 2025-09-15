@@ -44,7 +44,7 @@ def get_args_parser():
                         help="Path to the directory where masks and checkpoints will be output")
     parser.add_argument("--model_type", type=str, default="vit_l",
                         help="The type of model to load, in ['vit_h', 'vit_l', 'vit_b']")
-    parser.add_argument("--checkpoint", type=str, required=True,
+    parser.add_argument("--checkpoint", type=str, #required=True,
                         help="The path to the SAM checkpoint to use for mask generation.")
     parser.add_argument("--no_prompt_checkpoint", type=str, default=None,
                         help="The path to the SAM checkpoint trained with no prompt")
@@ -286,6 +286,8 @@ def train(net, train_dataloaders, optimizer, criterion):
 
         # Compute loss (use your specific loss function here)
         loss, _ = criterion(masks, labels_ori/255.)
+        # edge_loss = F.binary_cross_entropy(edges, labels_ori/255.)
+        # loss += 10*edge_loss
         loss.backward()
         optimizer.step()
 
@@ -300,7 +302,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         _, IoU = IoU_metric.get()
         _, nIoU = nIoU_metric.get()
 
-        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f'
+        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f, '
                              % (loss.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
 
     # Calculate average loss for the epoch

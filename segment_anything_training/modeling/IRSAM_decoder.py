@@ -118,9 +118,9 @@ class MaskDecoder(nn.Module):
           torch.Tensor: batched predictions of mask quality
         """
         edge_features = edge_embeddings.permute(0, 3, 1, 2)
-        # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
+        edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
         # edge_features = self.compress_vit_feat(edge_features)  # qian
-        edge_features = self.embedding_encoder(image_embeddings)  # shen
+        # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         masks, edges, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
