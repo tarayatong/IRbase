@@ -10,6 +10,7 @@ import torch
 import numpy as np
 from typing import Dict, List, Optional
 import logging
+from torch.nn import functional as F
 
 class MaskCache:
     """
@@ -190,7 +191,7 @@ def generate_masks_for_dataset(net, dataloader, device='cuda'):
             
             # 收集结果
             image_paths.extend(batch_paths)
-            all_masks.append(masks.cpu())
+            all_masks.append(torch.sigmoid(masks).cpu())
     
     # 合并所有mask
     all_masks = torch.cat(all_masks, dim=0)

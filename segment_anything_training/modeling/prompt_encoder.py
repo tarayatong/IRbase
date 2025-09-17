@@ -52,10 +52,10 @@ class PromptEncoder(nn.Module):
 
         self.mask_input_size = (4 * image_embedding_size[0], 4 * image_embedding_size[1])
         self.mask_downscaling = nn.Sequential(
-            nn.Conv2d(1, mask_in_chans // 4, kernel_size=2, stride=2),
+            nn.Conv2d(1, mask_in_chans // 4, kernel_size=3, stride=2, padding=1),
             LayerNorm2d(mask_in_chans // 4),
             activation(),
-            nn.Conv2d(mask_in_chans // 4, mask_in_chans, kernel_size=2, stride=2),
+            nn.Conv2d(mask_in_chans // 4, mask_in_chans, kernel_size=3, stride=2, padding=1),
             LayerNorm2d(mask_in_chans),
             activation(),
             nn.Conv2d(mask_in_chans, embed_dim, kernel_size=1),
@@ -128,9 +128,70 @@ class PromptEncoder(nn.Module):
         return corner_embedding
 
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
-        """Embeds mask inputs."""
-        mask_embedding = self.mask_downscaling(masks)
+        """Embeds mask inputs with Gaussian blur to expand attention range."""
+        # Apply Gaussian blur to expand the attention range with decreasing weights outward
+        blurred_masks = self._apply_gaussian_blur(masks)
+        # Then apply downscaling
+        mask_embedding = self.mask_downscaling(blurred_masks)
         return mask_embedding
+    
+    def _apply_gaussian_blur(self, masks: torch.Tensor, kernel_size: int = 15, sigma: float = 3.0) -> torch.Tensor:
+        """
+        Apply Gaussian blur to expand attention range with decreasing weights outward.
+        
+        Args:
+            masks: Input masks tensor of shape [B, 1, H, W]
+            kernel_size: Size of the Gaussian kernel (should be odd)
+            sigma: Standard deviation of the Gaussian kernel
+            
+        Returns:
+            Blurred masks with expanded attention range
+        """
+        # Ensure kernel size is odd
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+            
+        # Create Gaussian kernel
+        kernel = self._create_gaussian_kernel(kernel_size, sigma, masks.device, masks.dtype)
+        
+        # Apply padding to maintain spatial dimensions
+        padding = kernel_size // 2
+        
+        # Apply Gaussian blur using conv2d
+        blurred_masks = F.conv2d(masks, kernel, padding=padding, groups=masks.shape[1])
+        
+        return blurred_masks
+    
+    def _create_gaussian_kernel(self, kernel_size: int, sigma: float, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        """
+        Create a 2D Gaussian kernel.
+        
+        Args:
+            kernel_size: Size of the kernel (should be odd)
+            sigma: Standard deviation of the Gaussian
+            device: Device to create the kernel on
+            dtype: Data type of the kernel
+            
+        Returns:
+            Gaussian kernel of shape [1, 1, kernel_size, kernel_size]
+        """
+        # Create coordinate grids
+        coords = torch.arange(kernel_size, dtype=dtype, device=device)
+        coords = coords - kernel_size // 2
+        
+        # Create 2D coordinate grids
+        x, y = torch.meshgrid(coords, coords, indexing='ij')
+        
+        # Calculate Gaussian values
+        gaussian = torch.exp(-(x**2 + y**2) / (2 * sigma**2))
+        
+        # Normalize the kernel
+        gaussian = gaussian / gaussian.sum()
+        
+        # Reshape to [1, 1, kernel_size, kernel_size] for conv2d
+        gaussian = gaussian.unsqueeze(0).unsqueeze(0)
+        
+        return gaussian
 
     def _get_batch_size(
             self,
