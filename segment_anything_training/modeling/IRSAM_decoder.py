@@ -19,7 +19,7 @@ class MaskDecoder(nn.Module):
             *,
             transformer_dim: int,
             transformer: nn.Module,
-            num_multimask_outputs: int = 3,
+            num_multimask_outputs: int = 0,
             activation: Type[nn.Module] = nn.GELU,
             iou_head_depth: int = 3,
             iou_head_hidden_dim: int = 256,
@@ -137,6 +137,7 @@ class MaskDecoder(nn.Module):
             mask_slice = slice(0, 1)
         masks = masks[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
+
 
         # Prepare output
         return masks, edges, iou_pred

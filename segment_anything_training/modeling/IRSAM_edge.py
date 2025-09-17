@@ -122,18 +122,21 @@ class Sam(nn.Module):
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
             )
+            if low_res_mask.shape[-2:] != image_record["image"].shape[-2:]:
+              mask = self.postprocess_masks(
+                  low_res_mask,
+                  input_size=image_record["image"].shape[-2:],
+                  original_size=image_record["original_size"],
+              )
 
-            mask = self.postprocess_masks(
-                low_res_mask,
-                input_size=image_record["image"].shape[-2:],
-                original_size=image_record["original_size"],
-            )
-
-            edge = self.postprocess_masks(
-                low_res_edge,
-                input_size=image_record["image"].shape[-2:],
-                original_size=image_record["original_size"],
-            )
+              edge = self.postprocess_masks(
+                  low_res_edge,
+                  input_size=image_record["image"].shape[-2:],
+                  original_size=image_record["original_size"],
+              )
+            else:
+              mask = low_res_mask
+              edge = low_res_edge
 
             outputs.append(
                 {

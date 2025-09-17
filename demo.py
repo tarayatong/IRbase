@@ -32,9 +32,10 @@ from utils.metrics import SigmoidMetric, SamplewiseSigmoidMetric
 from utils.metric import PD_FA, ROCMetric
 from utils.loss_mask import DICE_loss
 from utils.log import initialize_logger
+from utils.mask_cache import MaskCache, generate_masks_for_dataset
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def get_args_parser():
@@ -44,7 +45,7 @@ def get_args_parser():
                         help="Path to the directory where masks and checkpoints will be output")
     parser.add_argument("--model_type", type=str, default="vit_l",
                         help="The type of model to load, in ['vit_h', 'vit_l', 'vit_b']")
-    parser.add_argument("--checkpoint", type=str, #required=True,
+    parser.add_argument("--checkpoint", type=str, #default='./workdirs/WPMD+multi+encoder_s4/best.pth',#required=True,
                         help="The path to the SAM checkpoint to use for mask generation.")
     parser.add_argument("--no_prompt_checkpoint", type=str, default=None,
                         help="The path to the SAM checkpoint trained with no prompt")
@@ -67,18 +68,44 @@ def get_args_parser():
 
     return parser.parse_args()
 
+def evaluate_save_masks(valid_datasets, args):
+    valid_im_gt_list = get_im_gt_name_list(valid_datasets, flag="valid")
+    valid_dataloaders, valid_datasets = create_dataloaders(valid_im_gt_list,
+                                                           my_transforms=[
+                                                               Resize(args.dataloader_size)
+                                                           ],
+                                                           batch_size=args.batch_size_valid,
+                                                           training=False)
+    net = build_sam_IRSAM(checkpoint=args.checkpoint)
+    if torch.cuda.is_available():
+        net.cuda()
+    image_paths, predicted_masks = generate_masks_for_dataset(net, valid_dataloaders)
+    output_path = os.path.join(args.output, "predicted_masks")
+    os.makedirs(output_path, exist_ok=True)
+    for i, img_path in enumerate(image_paths):
+        cv2.imwrite(os.path.join(output_path, os.path.basename(img_path)), predicted_masks[i].cpu().numpy() * 255)
+
+
+
 
 def main(valid_datasets, args):
-    # --- Step 1: Valid dataset ---
+    # --- Step 1: Initialize mask cache ---
+    mask_cache_dir = os.path.join(args.output, "mask_cache")
+    mask_cache = MaskCache(mask_cache_dir, dataset_name=valid_datasets[0]["name"])
+    print(f"Mask cache initialized: {mask_cache.get_cache_info()}")
+    
+    # --- Step 2: Valid dataset ---
     print("--- create train dataloader ---")
     train_im_gt_list = get_im_gt_name_list(valid_datasets, flag="train")
+    # 第一个epoch不使用mask_cache，从第二个epoch开始使用
     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                            my_transforms=[
                                                                Resize(args.dataloader_size)
                                                            ],
                                                            batch_size=args.batch_size_train,
-                                                           training=True)
-    print(len(train_dataloaders), " valid dataloaders created")
+                                                           training=True,
+                                                           mask_cache=None)  # 初始不使用cache
+    print(len(train_dataloaders), " train dataloaders created")
 
     print("--- create valid dataloader ---")
     valid_im_gt_list = get_im_gt_name_list(valid_datasets, flag="valid")
@@ -90,7 +117,7 @@ def main(valid_datasets, args):
                                                            training=False)
     print(len(valid_dataloaders), " valid dataloaders created")
 
-    # --- Step 2: Load pretrained Network---
+    # --- Step 3: Load pretrained Network---
     net = build_sam_IRSAM(checkpoint=args.checkpoint)
     if torch.cuda.is_available():
         net.cuda()
@@ -120,10 +147,45 @@ def main(valid_datasets, args):
                 net.load_state_dict(torch.load(args.restore_model, map_location="cpu"))
         best_iou = 0
         # Loop for training and evaluating for 20 epochs
-        for epoch in range(1, 501):  # 20 epochs
+        for epoch in range(1, 201):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
+            
+            # 从第2个epoch开始，使用上一轮训练的mask作为mask_input
+            if epoch >= 2 and mask_cache.has_cache_for_epoch(epoch - 1):
+                print(f"Using cached masks from epoch {epoch - 1} as mask_inputs")
+                # 重新创建带有mask_cache的训练数据加载器
+                train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
+                                                                       my_transforms=[
+                                                                           Resize(args.dataloader_size)
+                                                                       ],
+                                                                       batch_size=args.batch_size_train,
+                                                                       training=True,
+                                                                       mask_cache=mask_cache)
+            
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
+
+            # 训练完成后，生成这个epoch的mask预测结果并保存
+            print(f"Generating masks for epoch {epoch}...")
+            try:
+                # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
+                mask_gen_dataloaders, _ = create_dataloaders(train_im_gt_list,
+                                                           my_transforms=[
+                                                               Resize(args.dataloader_size)
+                                                           ],
+                                                           batch_size=args.batch_size_valid,  # 使用较小的batch size
+                                                           training=True,  # 使用training=True来得到单个dataloader
+                                                           mask_cache=None)  # 不使用cache
+                
+                # 生成mask预测结果
+                image_paths, predicted_masks = generate_masks_for_dataset(net, mask_gen_dataloaders)
+                
+                # 保存到缓存
+                mask_cache.save_epoch_masks(epoch, image_paths, predicted_masks)
+                print(f"Saved {len(image_paths)} masks for epoch {epoch}")
+                
+            except Exception as e:
+                print(f"Warning: Failed to generate/save masks for epoch {epoch}: {e}")
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")
@@ -183,6 +245,7 @@ def evaluate(net, valid_dataloaders):
             if torch.cuda.is_available():
                 inputs_val = inputs_val.cuda()
                 labels_ori = labels_ori.cuda()
+                # mask_inputs = mask_inputs.cuda()
 
             # Create the batched input for the model
             batched_input = []
@@ -260,6 +323,8 @@ def train(net, train_dataloaders, optimizer, criterion):
         if torch.cuda.is_available():
             inputs_val = inputs_val.cuda()
             labels_ori = labels_ori.cuda()
+            if mask_inputs is not None:
+                mask_inputs = mask_inputs.cuda()
 
         # Create the batched input for the model
         batched_input = []
@@ -276,7 +341,10 @@ def train(net, train_dataloaders, optimizer, criterion):
             if boxes is not None:
                 dict_input['boxes'] = boxes[b_i]  # Add bounding box
             if mask_inputs is not None:
-                dict_input['mask_inputs'] = mask_inputs[b_i]  # Add mask inputs
+                # 检查是否是真正的cached mask（非全零张量）
+                current_mask = mask_inputs[b_i]
+                if torch.sum(current_mask) > 0:  # 如果不是全零张量
+                    dict_input['mask_inputs'] = current_mask.unsqueeze(0)  # Add mask inputs，添加batch维度
 
             batched_input.append(dict_input)
 
@@ -346,4 +414,6 @@ if __name__ == "__main__":
 
     args = get_args_parser()
 
-    main(valid_datasets, args)
+    # main(valid_datasets, args)
+    evaluate_save_masks(valid_datasets, args)
+

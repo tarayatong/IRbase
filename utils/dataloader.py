@@ -96,7 +96,7 @@ def get_im_gt_name_list(datasets, flag='train'):
 
     return name_im_gt_list
 
-def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training=False):
+def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training=False, mask_cache=None):
     gos_dataloaders = []
     gos_datasets = []
 
@@ -113,7 +113,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
 
     if training:
         for i in range(len(name_im_gt_list)):
-            gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms))
+            gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms), mask_cache=mask_cache)
             gos_datasets.append(gos_dataset)
 
         gos_dataset = ConcatDataset(gos_datasets)
@@ -125,7 +125,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
     else:
         for i in range(len(name_im_gt_list)):
             gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms),
-                                        eval_ori_resolution=True)
+                                        eval_ori_resolution=True, mask_cache=mask_cache)
             dataloader = DataLoader(gos_dataset, batch_size=batch_size)
 
             gos_dataloaders.append(dataloader)
@@ -140,14 +140,20 @@ class RandomHFlip(object):
 
     def __call__(self, sample):
         imidx, image, label, edge, shape = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
+        mask_inputs = sample.get('mask_inputs', torch.zeros(1, image.shape[1], image.shape[2]))
+        path = sample.get('path', None)
 
         # random horizontal flip
         if random.random() >= self.prob:
             image = torch.flip(image, dims=[2])
             label = torch.flip(label, dims=[2])
             edge = torch.flip(edge, dims=[2])
+            mask_inputs = torch.flip(mask_inputs, dims=[2])
 
-        return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge,  'shape': shape}
+        result = {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': shape, 'mask_inputs': mask_inputs}
+        if path is not None:
+            result['path'] = path
+        return result
 
 
 class Resize(object):
@@ -156,12 +162,18 @@ class Resize(object):
 
     def __call__(self, sample):
         imidx, image, label, edge, shape = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
+        mask_inputs = sample.get('mask_inputs', torch.zeros(1, image.shape[1], image.shape[2]))
+        path = sample.get('path', None)
 
         image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), self.size, mode='bilinear'), dim=0)
         label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), self.size, mode='bilinear'), dim=0)
         edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), self.size, mode='bilinear'), dim=0)
+        mask_inputs = torch.squeeze(F.interpolate(torch.unsqueeze(mask_inputs, 0), self.size, mode='bilinear'), dim=0)
 
-        return {'imidx': imidx, 'image': image, 'label': label, 'edge':edge, 'shape': torch.tensor(self.size)}
+        result = {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.size), 'mask_inputs': mask_inputs}
+        if path is not None:
+            result['path'] = path
+        return result
 
 
 class RandomCrop(object):
@@ -257,10 +269,12 @@ class LargeScaleJitter(object):
 
 
 class OnlineDataset(Dataset):
-    def __init__(self, name_im_gt_list, transform=None, eval_ori_resolution=False):
+    def __init__(self, name_im_gt_list, transform=None, eval_ori_resolution=False, mask_cache=None):
 
         self.transform = transform
         self.dataset = {}
+        self.mask_cache = mask_cache  # MaskCache instance for loading previous epoch masks
+        
         # combine different datasets into one
         dataset_names = []
         dt_name_list = []  # dataset name per image
@@ -321,6 +335,21 @@ class OnlineDataset(Dataset):
             "shape": torch.tensor(im.shape[-2:]),
             "path": self.dataset["im_path"][idx]
         }
+
+        # 尝试从mask缓存中加载上一轮的预测结果
+        if self.mask_cache is not None:
+            cached_mask = self.mask_cache.get_mask(im_path)
+            if cached_mask is not None:
+                # 确保mask的尺寸与图像匹配
+                if len(cached_mask.shape) == 2:
+                    cached_mask = torch.unsqueeze(cached_mask, 0)  # 添加channel维度
+                sample["mask_inputs"] = cached_mask
+            else:
+                # 如果没有缓存的mask，创建一个空的tensor
+                sample["mask_inputs"] = torch.zeros(1, im.shape[1], im.shape[2])
+        else:
+            # 如果没有mask_cache，创建一个空的tensor
+            sample["mask_inputs"] = torch.zeros(1, im.shape[1], im.shape[2])
 
         if self.transform:
             sample = self.transform(sample)

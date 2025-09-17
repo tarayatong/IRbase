@@ -187,8 +187,8 @@ class PromptEncoder(nn.Module):
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
 
         if masks is not None:
-            masks = F.interpolate(masks, self.mask_input_size, mode="bilinear")
-            dense_embeddings = self._embed_masks(masks)
+            masks = F.interpolate(masks.unsqueeze(0), self.mask_input_size, mode="bilinear")
+            dense_embeddings = self._embed_masks(masks.cuda())
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
                 bs, -1, self.image_embedding_size[0], self.image_embedding_size[1]
