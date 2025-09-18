@@ -52,7 +52,10 @@ class PromptEncoder(nn.Module):
 
         self.mask_input_size = (4 * image_embedding_size[0], 4 * image_embedding_size[1])
         self.mask_downscaling = nn.Sequential(
-            nn.Conv2d(1, mask_in_chans // 4, kernel_size=3, stride=2, padding=1),
+            nn.Conv2d(1, mask_in_chans // 16, kernel_size=3, stride=1, padding=1),
+            LayerNorm2d(mask_in_chans // 16),
+            activation(),
+            nn.Conv2d(mask_in_chans // 16, mask_in_chans // 4, kernel_size=3, stride=2, padding=1),
             LayerNorm2d(mask_in_chans // 4),
             activation(),
             nn.Conv2d(mask_in_chans // 4, mask_in_chans, kernel_size=3, stride=2, padding=1),
@@ -130,12 +133,12 @@ class PromptEncoder(nn.Module):
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs with Gaussian blur to expand attention range."""
         # Apply Gaussian blur to expand the attention range with decreasing weights outward
-        blurred_masks = self._apply_gaussian_blur(masks)
+        # blurred_masks = self._apply_gaussian_blur(masks)
         # Then apply downscaling
-        mask_embedding = self.mask_downscaling(blurred_masks)
+        mask_embedding = self.mask_downscaling(masks)
         return mask_embedding
     
-    def _apply_gaussian_blur(self, masks: torch.Tensor, kernel_size: int = 15, sigma: float = 3.0) -> torch.Tensor:
+    def _apply_gaussian_blur(self, masks: torch.Tensor, kernel_size: int = 5, sigma: float = 3.0) -> torch.Tensor:
         """
         Apply Gaussian blur to expand attention range with decreasing weights outward.
         

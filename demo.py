@@ -35,7 +35,7 @@ from utils.log import initialize_logger
 from utils.mask_cache import MaskCache, generate_masks_for_dataset
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def get_args_parser():
@@ -60,6 +60,7 @@ def get_args_parser():
     parser.add_argument('--batch_size_train', default=4, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
+    parser.add_argument('--update_mask_cache', default=True, type=bool)
 
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--visualize', action='store_true')
@@ -273,7 +274,7 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=mask_cache)
                 else:
-                    print(f"No cached masks found for epoch {epoch - 1}, training without mask_inputs")
+                    print(f"No cached masks found for epoch {epoch - 1}, training with initial mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
                                                                                Resize(args.dataloader_size)
@@ -285,27 +286,28 @@ def main(valid_datasets, args):
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
 
+            if args.update_mask_cache:
             # 训练完成后，生成这个epoch的mask预测结果并保存
-            print(f"Generating masks for epoch {epoch}...")
-            try:
-                # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
-                mask_gen_dataloaders, _ = create_dataloaders(train_im_gt_list,
-                                                           my_transforms=[
-                                                               Resize(args.dataloader_size)
-                                                           ],
-                                                           batch_size=args.batch_size_valid,  # 使用较小的batch size
-                                                           training=True,  # 使用training=True来得到单个dataloader
-                                                           mask_cache=None)  # 不使用cache
+                print(f"Generating masks for epoch {epoch}...")
+                try:
+                    # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
+                    mask_gen_dataloaders, _ = create_dataloaders(train_im_gt_list,
+                                                            my_transforms=[
+                                                                Resize(args.dataloader_size)
+                                                            ],
+                                                            batch_size=args.batch_size_valid,  # 使用较小的batch size
+                                                            training=True,  # 使用training=True来得到单个dataloader
+                                                            mask_cache=None)  # 不使用cache
+                    
+                    # 生成mask预测结果
+                    image_paths, predicted_masks = generate_masks_for_dataset(net, mask_gen_dataloaders)
+                    
+                    # 保存到缓存
+                    mask_cache.save_epoch_masks(epoch, image_paths, predicted_masks)
+                    print(f"Saved {len(image_paths)} masks for epoch {epoch}")
                 
-                # 生成mask预测结果
-                image_paths, predicted_masks = generate_masks_for_dataset(net, mask_gen_dataloaders)
-                
-                # 保存到缓存
-                mask_cache.save_epoch_masks(epoch, image_paths, predicted_masks)
-                print(f"Saved {len(image_paths)} masks for epoch {epoch}")
-                
-            except Exception as e:
-                print(f"Warning: Failed to generate/save masks for epoch {epoch}: {e}")
+                except Exception as e:
+                    print(f"Warning: Failed to generate/save masks for epoch {epoch}: {e}")
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")
