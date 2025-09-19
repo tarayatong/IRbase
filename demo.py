@@ -35,7 +35,7 @@ from utils.log import initialize_logger
 from utils.mask_cache import MaskCache, generate_masks_for_dataset
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def get_args_parser():

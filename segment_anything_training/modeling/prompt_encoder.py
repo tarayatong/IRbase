@@ -133,9 +133,9 @@ class PromptEncoder(nn.Module):
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs with Gaussian blur to expand attention range."""
         # Apply Gaussian blur to expand the attention range with decreasing weights outward
-        # blurred_masks = self._apply_gaussian_blur(masks)
+        blurred_masks = self._apply_gaussian_blur(masks)
         # Then apply downscaling
-        mask_embedding = self.mask_downscaling(masks)
+        mask_embedding = self.mask_downscaling(blurred_masks)
         return mask_embedding
     
     def _apply_gaussian_blur(self, masks: torch.Tensor, kernel_size: int = 5, sigma: float = 3.0) -> torch.Tensor:
