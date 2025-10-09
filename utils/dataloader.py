@@ -321,7 +321,8 @@ class OnlineDataset(Dataset):
         if im.shape[2] == 1:
             im = np.repeat(im, 3, axis=2)
 
-        edge = cv2.Canny(gt, 100, 200)
+        # edge = cv2.Canny(gt, 100, 200)
+        edge = cv2.Canny(im, 20, 80) *(1-gt/255.)
         im = torch.tensor(im.copy(), dtype=torch.float32)
         im = torch.transpose(torch.transpose(im, 1, 2), 0, 1)
         gt = torch.unsqueeze(torch.tensor(gt, dtype=torch.float32), 0)

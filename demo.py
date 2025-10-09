@@ -440,6 +440,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         point_labels = data_train.get('point_labels', None)  # Optional point labels
         boxes = data_train.get('boxes', None)  # Optional bounding boxes
         mask_inputs = data_train.get('mask_inputs', None)  # Optional mask inputs
+        edges = data_train.get('edge', None)  # Optional edge inputs
 
         # Move data to GPU if available
         if torch.cuda.is_available():
@@ -467,17 +468,19 @@ def train(net, train_dataloaders, optimizer, criterion):
                 current_mask = mask_inputs[b_i]
                 if torch.sum(current_mask) > 0:  # 如果不是全零张量
                     dict_input['mask_inputs'] = current_mask  # Add mask inputs，添加batch维度
+            if edges is not None:
+                dict_input['edge'] = edges[b_i]  # Add edge inputs
 
             batched_input.append(dict_input)
 
         # Forward pass
         optimizer.zero_grad()
-        masks, edges = net(batched_input)
+        masks, bgs = net(batched_input)
 
         # Compute loss (use your specific loss function here)
         loss, _ = criterion(masks, labels_ori/255.)
-        # edge_loss = F.binary_cross_entropy(edges, labels_ori/255.)
-        # loss += 10*edge_loss
+        edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
+        loss += 10*edge_loss
         loss.backward()
         optimizer.step()
 
