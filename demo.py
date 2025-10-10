@@ -60,7 +60,9 @@ def get_args_parser():
     parser.add_argument('--batch_size_train', default=4, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
-    parser.add_argument('--update_mask_cache', default=True, type=bool)
+    parser.add_argument('--update_mask_cache', default=False, type=bool)
+    parser.add_argument('--use_mask_cache', default=False, type=bool,
+                        help="Whether to use mask cache during training. If False, disables all mask caching functionality.")
 
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--visualize', action='store_true')
@@ -146,10 +148,14 @@ def evaluate_save_masks(valid_datasets, args):
 
 
 def main(valid_datasets, args):
-    # --- Step 1: Initialize mask cache ---
-    mask_cache_dir = os.path.join(args.output, "mask_cache")
-    mask_cache = MaskCache(mask_cache_dir, dataset_name=valid_datasets[0]["name"])
-    print(f"Mask cache initialized: {mask_cache.get_cache_info()}")
+    # --- Step 1: Initialize mask cache (if enabled) ---
+    mask_cache = None
+    if args.use_mask_cache:
+        mask_cache_dir = os.path.join(args.output, "mask_cache")
+        mask_cache = MaskCache(mask_cache_dir, dataset_name=valid_datasets[0]["name"])
+        print(f"Mask cache initialized: {mask_cache.get_cache_info()}")
+    else:
+        print("Mask cache is disabled by --use_mask_cache=False")
     
     # --- Step 2: Valid dataset ---
     print("--- create train dataloader ---")
@@ -176,48 +182,52 @@ def main(valid_datasets, args):
     os.makedirs(args.output, exist_ok=True)
     
     # --- Step 4: Handle initial mask cache logic ---
-    print("--- Checking initial mask cache status ---")
     initial_cache_available = False
     
-    if mask_cache.has_cache_for_epoch(0):
-        print("Initial mask cache already exists, will use it directly")
-        initial_cache_available = True
-    else:
-        print("No initial mask cache found")
-        # 检查是否有checkpoint可以用来生成初始cache
-        if args.checkpoint and os.path.exists(args.checkpoint):
-            print(f"Checking checkpoint compatibility: {args.checkpoint}")
-            if check_checkpoint_compatibility(net, args.checkpoint):
-                print("Checkpoint is compatible, generating initial mask cache...")
-                try:
-                    # 创建用于生成初始mask的数据加载器
-                    initial_mask_dataloaders, _ = create_dataloaders(train_im_gt_list,
-                                                                   my_transforms=[
-                                                                       Resize(args.dataloader_size)
-                                                                   ],
-                                                                   batch_size=args.batch_size_valid,
-                                                                   training=True,
-                                                                   mask_cache=None)  # 不使用cache
-                    
-                    # 使用checkpoint生成初始mask预测结果
-                    image_paths, predicted_masks = generate_masks_for_dataset(net, initial_mask_dataloaders)
-                    
-                    # 保存到缓存（epoch 0表示初始checkpoint生成的mask）
-                    mask_cache.save_epoch_masks(0, image_paths, predicted_masks)
-                    print(f"Generated and saved {len(image_paths)} initial masks from checkpoint")
-                    initial_cache_available = True
-                    
-                except Exception as e:
-                    print(f"Warning: Failed to generate initial mask cache: {e}")
+    if args.use_mask_cache:
+        print("--- Checking initial mask cache status ---")
+        
+        if mask_cache.has_cache_for_epoch(0):
+            print("Initial mask cache already exists, will use it directly")
+            initial_cache_available = True
+        else:
+            print("No initial mask cache found")
+            # 检查是否有checkpoint可以用来生成初始cache
+            if args.checkpoint and os.path.exists(args.checkpoint):
+                print(f"Checking checkpoint compatibility: {args.checkpoint}")
+                if check_checkpoint_compatibility(net, args.checkpoint):
+                    print("Checkpoint is compatible, generating initial mask cache...")
+                    try:
+                        # 创建用于生成初始mask的数据加载器
+                        initial_mask_dataloaders, _ = create_dataloaders(train_im_gt_list,
+                                                                       my_transforms=[
+                                                                           Resize(args.dataloader_size)
+                                                                       ],
+                                                                       batch_size=args.batch_size_valid,
+                                                                       training=True,
+                                                                       mask_cache=None)  # 不使用cache
+                        
+                        # 使用checkpoint生成初始mask预测结果
+                        image_paths, predicted_masks = generate_masks_for_dataset(net, initial_mask_dataloaders)
+                        
+                        # 保存到缓存（epoch 0表示初始checkpoint生成的mask）
+                        mask_cache.save_epoch_masks(0, image_paths, predicted_masks)
+                        print(f"Generated and saved {len(image_paths)} initial masks from checkpoint")
+                        initial_cache_available = True
+                        
+                    except Exception as e:
+                        print(f"Warning: Failed to generate initial mask cache: {e}")
+                        initial_cache_available = False
+                else:
+                    print("Checkpoint is not compatible with current network structure")
+                    print("Will proceed with training without initial mask cache")
                     initial_cache_available = False
             else:
-                print("Checkpoint is not compatible with current network structure")
+                print("No checkpoint provided or checkpoint file not found")
                 print("Will proceed with training without initial mask cache")
                 initial_cache_available = False
-        else:
-            print("No checkpoint provided or checkpoint file not found")
-            print("Will proceed with training without initial mask cache")
-            initial_cache_available = False
+    else:
+        print("Mask cache is disabled, skipping cache initialization")
     # --- Step 3: Train or Evaluate ---
     if args.eval:
         if args.restore_model:
@@ -243,8 +253,8 @@ def main(valid_datasets, args):
         for epoch in range(1, 201):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
             if epoch == 1:
-                # 第一轮训练：使用初始cache（如果可用）
-                if initial_cache_available:
+                # 第一轮训练：使用初始cache（如果可用且启用）
+                if args.use_mask_cache and initial_cache_available:
                     print(f"Using available initial mask cache as mask_inputs for epoch 1")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
@@ -254,7 +264,10 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=mask_cache)
                 else:
-                    print("No initial mask cache available, training epoch 1 without mask_inputs")
+                    if not args.use_mask_cache:
+                        print("Mask cache disabled, training epoch 1 without mask_inputs")
+                    else:
+                        print("No initial mask cache available, training epoch 1 without mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
                                                                                Resize(args.dataloader_size)
@@ -263,8 +276,8 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=None)
             else:
-                # 后续轮次使用上一轮训练的权重生成的mask_cache
-                if mask_cache.has_cache_for_epoch(epoch - 1):
+                # 后续轮次使用上一轮训练的权重生成的mask_cache（如果启用）
+                if args.use_mask_cache and mask_cache.has_cache_for_epoch(epoch - 1):
                     print(f"Using cached masks from epoch {epoch - 1} as mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
@@ -274,7 +287,10 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=mask_cache)
                 else:
-                    print(f"No cached masks found for epoch {epoch - 1}, training with initial mask_inputs")
+                    if not args.use_mask_cache:
+                        print(f"Mask cache disabled, training epoch {epoch} without mask_inputs")
+                    else:
+                        print(f"No cached masks found for epoch {epoch - 1}, training without mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
                                                                                Resize(args.dataloader_size)
@@ -286,8 +302,8 @@ def main(valid_datasets, args):
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
 
-            if args.update_mask_cache:
-            # 训练完成后，生成这个epoch的mask预测结果并保存
+            if args.use_mask_cache and args.update_mask_cache:
+                # 训练完成后，生成这个epoch的mask预测结果并保存
                 print(f"Generating masks for epoch {epoch}...")
                 try:
                     # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
@@ -308,6 +324,10 @@ def main(valid_datasets, args):
                 
                 except Exception as e:
                     print(f"Warning: Failed to generate/save masks for epoch {epoch}: {e}")
+            elif not args.use_mask_cache:
+                print(f"Mask cache disabled, skipping mask generation for epoch {epoch}")
+            elif not args.update_mask_cache:
+                print(f"Mask cache update disabled, skipping mask generation for epoch {epoch}")
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")
