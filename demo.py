@@ -57,13 +57,13 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=2, type=int)
+    parser.add_argument('--batch_size_train', default=4, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
     parser.add_argument('--update_mask_cache', default=False, type=bool)
     parser.add_argument('--mask_cache_update_freq', default=1, type=int,
                         help="Frequency of mask cache updates. Update cache every k epochs. Default is 1 (every epoch).")
-    parser.add_argument('--use_mask_cache', default=False, type=bool,
+    parser.add_argument('--use_mask_cache', default=True, type=bool,
                         help="Whether to use mask cache during training. If False, disables all mask caching functionality.")
 
     parser.add_argument('--eval', action='store_true')
