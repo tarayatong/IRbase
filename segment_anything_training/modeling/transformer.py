@@ -13,8 +13,8 @@ from .prompt_encoder import PositionEmbeddingRandom
 
 from .common import MLPBlock, LayerNorm2d
 
-from timm.models.vision_transformer import VisionTransformer, Block
-from timm.layers import Mlp
+# from timm.models.vision_transformer import VisionTransformer, Block
+# from timm.layers import Mlp
 
 
 class TwoWayTransformer_1(nn.Module):

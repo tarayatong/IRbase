@@ -185,9 +185,9 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
-        alpha = self.sigmoid(masks)
+        # alpha = self.sigmoid(masks)
 
-        masks = alpha * masks - (1-alpha) * bg
+        # masks = masks*torch.sigmoid(masks - bg)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)

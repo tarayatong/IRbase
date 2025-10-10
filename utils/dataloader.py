@@ -322,7 +322,11 @@ class OnlineDataset(Dataset):
             im = np.repeat(im, 3, axis=2)
 
         # edge = cv2.Canny(gt, 100, 200)
-        edge = cv2.Canny(im, 20, 80) *(1-gt/255.)
+        edge = cv2.Canny(im, 20, 80)
+        blurred = cv2.GaussianBlur(edge, (5, 5), 0)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))  # 半径 5 -> 直径 11
+        gt_dilated = cv2.dilate(gt, kernel, iterations=1)
+        edge = (blurred > 0).astype(np.float32) * (1 - gt_dilated / 255.)
         im = torch.tensor(im.copy(), dtype=torch.float32)
         im = torch.transpose(torch.transpose(im, 1, 2), 0, 1)
         gt = torch.unsqueeze(torch.tensor(gt, dtype=torch.float32), 0)

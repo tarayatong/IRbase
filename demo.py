@@ -35,7 +35,7 @@ from utils.log import initialize_logger
 from utils.mask_cache import MaskCache, generate_masks_for_dataset
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def get_args_parser():
@@ -57,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=4, type=int)
+    parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
     parser.add_argument('--update_mask_cache', default=True, type=bool)
@@ -446,6 +446,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         if torch.cuda.is_available():
             inputs_val = inputs_val.cuda()
             labels_ori = labels_ori.cuda()
+            edges = edges.cuda()
             if mask_inputs is not None:
                 mask_inputs = mask_inputs.cuda()
 

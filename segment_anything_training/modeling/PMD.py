@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pywt
+# import pywt
 import numpy as np
 import torch.nn.functional as F
 from functools import partial
 import pywt
 import pywt.data
-from timm.layers import DropPath
+# from timm.layers import DropPath
 
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
