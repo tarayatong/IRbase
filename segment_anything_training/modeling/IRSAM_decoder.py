@@ -188,6 +188,7 @@ class MaskDecoder(nn.Module):
         # alpha = self.sigmoid(masks)
 
         # masks = masks*torch.sigmoid(masks - bg)
+        masks = masks-0.5*bg
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
