@@ -408,13 +408,14 @@ def evaluate(net, valid_dataloaders):
 
                 batched_input.append(dict_input)
 
-            masks, edges = net(batched_input)
+            outputs, masks, edges = net(batched_input)
 
             torch.cuda.synchronize()
 
-            IoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
-            nIoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
-            Pd_Fa.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
+            # 使用outputs作为最终预测结果进行评估
+            IoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
+            nIoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
+            Pd_Fa.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
 
             FA, PD = Pd_Fa.get(len(valid_dataloader))
             _, IoU = IoU_metric.get()
@@ -496,12 +497,18 @@ def train(net, train_dataloaders, optimizer, criterion):
 
         # Forward pass
         optimizer.zero_grad()
-        masks, bgs = net(batched_input)
+        outputs, masks, bgs = net(batched_input)
 
-        # Compute loss (use your specific loss function here)
-        loss, _ = criterion(masks, labels_ori/255.)
+        # Compute loss with three outputs
+        # 1. outputs用于IoU损失（DICE损失）
+        iou_loss, _ = criterion(outputs, labels_ori/255.)
+        # 2. masks用于BCE损失
+        bce_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
+        # 3. bgs用于edge BCE损失
         edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
-        loss += 10*edge_loss
+        
+        # 组合总损失
+        loss = iou_loss + 10*bce_loss + 10*edge_loss
         loss.backward()
         optimizer.step()
 

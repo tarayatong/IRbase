@@ -187,11 +187,11 @@ def generate_masks_for_dataset(net, dataloader, device='cuda'):
                 batched_input.append(dict_input)
             
             # 前向推理
-            masks, _ = net(batched_input)
+            outputs, masks, _ = net(batched_input)
             
-            # 收集结果
+            # 收集结果 - 使用outputs作为最终预测结果
             image_paths.extend(batch_paths)
-            all_masks.append(torch.sigmoid(masks).cpu())
+            all_masks.append(torch.sigmoid(outputs).cpu())
     
     # 合并所有mask
     all_masks = torch.cat(all_masks, dim=0)

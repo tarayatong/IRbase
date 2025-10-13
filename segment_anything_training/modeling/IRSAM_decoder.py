@@ -118,15 +118,16 @@ class MaskDecoder(nn.Module):
             mask.
 
         Returns:
-          torch.Tensor: batched predicted masks
-          torch.Tensor: batched predictions of mask quality
+          torch.Tensor: batched predicted outputs (for IoU loss)
+          torch.Tensor: batched predicted masks (for BCE loss)
+          torch.Tensor: batched predicted background/edges (for edge BCE loss)
         """
         edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
         edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
-        masks, edges, iou_pred = self.predict_masks(
+        outputs, masks, bg, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
             edge_embeddings=edge_features,
             image_pe=image_pe,
@@ -139,12 +140,12 @@ class MaskDecoder(nn.Module):
             mask_slice = slice(1, None)
         else:
             mask_slice = slice(0, 1)
+        outputs = outputs[:, mask_slice, :, :]
         masks = masks[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
 
-
         # Prepare output
-        return masks, edges, iou_pred
+        return outputs, masks, bg
 
     def predict_masks(
             self,
@@ -154,7 +155,13 @@ class MaskDecoder(nn.Module):
             sparse_prompt_embeddings: torch.Tensor,
             dense_prompt_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Predicts masks. See 'forward' for more details."""
+        """Predicts masks. See 'forward' for more details.
+        
+        Returns:
+          torch.Tensor: outputs (for IoU loss)
+          torch.Tensor: masks (for BCE loss) 
+          torch.Tensor: bg (for edge BCE loss)
+        """
         # Concatenate output tokens
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.edge_token.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
@@ -193,12 +200,12 @@ class MaskDecoder(nn.Module):
         # alpha = self.sigmoid(masks)
 
         # masks = masks*torch.sigmoid(masks - bg)
-        masks = masks-0.5*bg
+        outputs = 2*masks-bg
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return masks, bg, iou_pred
+        return outputs, masks, bg
 
 
 # Lightly adapted from
