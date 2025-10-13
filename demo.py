@@ -61,7 +61,7 @@ def get_args_parser():
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
     parser.add_argument('--update_mask_cache', default=True, type=bool)
-    parser.add_argument('--use_mask_cache', default=True, type=bool,
+    parser.add_argument('--use_mask_cache', default=False, type=bool,
                         help="Whether to use mask cache during training. If False, disables all mask caching functionality.")
 
     parser.add_argument('--eval', action='store_true')
