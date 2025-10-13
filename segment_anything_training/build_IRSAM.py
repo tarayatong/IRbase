@@ -7,7 +7,7 @@ from .modeling.IRSAM_encoder import TinyViT as EdgeEncoder
 from .modeling.IRSAM_edge import Sam as EdgeIRSAM
 
 
-def build_sam_IRSAM(checkpoint=None):
+def build_sam_IRSAM(checkpoint=None, use_mask_cache=False):
     prompt_embed_dim = 256
     image_size = 512
     print("input_size:", image_size)
@@ -42,6 +42,7 @@ def build_sam_IRSAM(checkpoint=None):
                     num_heads=8,
                 ),
                 transformer_dim=prompt_embed_dim,
+                mask_cache=use_mask_cache,
             ),
             pixel_mean=[123.675, 116.28, 103.53],
             pixel_std=[58.395, 57.12, 57.375],

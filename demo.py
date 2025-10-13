@@ -173,7 +173,7 @@ def main(valid_datasets, args):
     print(len(valid_dataloaders), " valid dataloaders created")
 
     # --- Step 3: Load pretrained Network---
-    net = build_sam_IRSAM(checkpoint=args.checkpoint)
+    net = build_sam_IRSAM(checkpoint=args.checkpoint, use_mask_cache=args.use_mask_cache)  # 传递use_mask_cache参数
     if torch.cuda.is_available():
         net.cuda()
 

@@ -23,6 +23,7 @@ class MaskDecoder(nn.Module):
             activation: Type[nn.Module] = nn.GELU,
             iou_head_depth: int = 3,
             iou_head_hidden_dim: int = 256,
+            mask_cache: bool = False,  # 新增参数
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -39,10 +40,13 @@ class MaskDecoder(nn.Module):
             mask quality
           iou_head_hidden_dim (int): the hidden dimension of the MLP
             used to predict mask quality
+          mask_cache (bool): whether to enable mask cache functionality
+            for dense_prompt_embeddings fusion
         """
         super().__init__()
         self.transformer_dim = transformer_dim
         self.transformer = transformer
+        self.mask_cache = mask_cache  # 新增属性
 
         self.num_multimask_outputs = num_multimask_outputs
 
@@ -158,7 +162,8 @@ class MaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
-        src = src * (1+torch.sigmoid(dense_prompt_embeddings))
+        if self.training and self.mask_cache:
+            src = src * (1+torch.sigmoid(dense_prompt_embeddings))
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
