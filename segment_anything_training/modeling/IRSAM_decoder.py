@@ -127,7 +127,7 @@ class MaskDecoder(nn.Module):
         edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
-        outputs, masks, bg, iou_pred = self.predict_masks(
+        outputs, masks, bg = self.predict_masks(
             image_embeddings=image_embeddings,
             edge_embeddings=edge_features,
             image_pe=image_pe,
@@ -142,7 +142,7 @@ class MaskDecoder(nn.Module):
             mask_slice = slice(0, 1)
         outputs = outputs[:, mask_slice, :, :]
         masks = masks[:, mask_slice, :, :]
-        iou_pred = iou_pred[:, mask_slice]
+        # iou_pred = iou_pred[:, mask_slice]
 
         # Prepare output
         return outputs, masks, bg
