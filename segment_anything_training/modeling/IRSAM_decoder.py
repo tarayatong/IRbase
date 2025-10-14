@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from typing import List, Tuple, Type
 
 from .common import LayerNorm2d
+from ..utils.dysample import DySample
 
 
 class MaskDecoder(nn.Module):
@@ -54,11 +55,14 @@ class MaskDecoder(nn.Module):
         self.num_mask_tokens = num_multimask_outputs + 1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
+        # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            DySample(transformer_dim, scale=2),
+            nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            DySample(transformer_dim // 4, scale=2),
+            nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -77,23 +81,30 @@ class MaskDecoder(nn.Module):
         self.edge_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
         self.num_mask_tokens = self.num_mask_tokens + 1
 
+        # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.compress_vit_feat = nn.Sequential(
-            nn.ConvTranspose2d(160, transformer_dim, 2, 2),
+            DySample(160, scale=2),
+            nn.Conv2d(160, transformer_dim, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim),
             nn.GELU(),
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 8, 2, 2)
+            DySample(transformer_dim, scale=2),
+            nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1)
         )
+        # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.embedding_encoder = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, 2, 2),
+            DySample(transformer_dim, scale=2),
+            nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim // 4),
             nn.GELU(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, 2, 2)
+            DySample(transformer_dim // 4, scale=2),
+            nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1)
         )
+        # 这里的ConvTranspose2d参数(3,1,1)实际上是普通卷积，直接用Conv2d替换
         self.embedding_maskfeature = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim // 8, transformer_dim // 4, 3,1,1),
+            nn.Conv2d(transformer_dim // 8, transformer_dim // 4, kernel_size=3, stride=1, padding=1),
             LayerNorm2d(transformer_dim // 4),
             nn.GELU(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, 3,1,1)
+            nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, stride=1, padding=1)
         )
         self.sigmoid = nn.Sigmoid()
 
@@ -124,12 +135,12 @@ class MaskDecoder(nn.Module):
         """
         edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        edge_features = self.compress_vit_feat(edge_features)  # qian
+        # edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg = self.predict_masks(
             image_embeddings=image_embeddings,
-            edge_embeddings=edge_features,
+            edge_embeddings=None,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
@@ -183,7 +194,7 @@ class MaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
 
-        edge_embedding = edge_embeddings.repeat(b, 1, 1, 1) # self.embedding_maskfeature(upscaled_embedding) +
+        edge_embedding = self.embedding_maskfeature(upscaled_embedding) #+ edge_embeddings.repeat(b, 1, 1, 1) # 
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
