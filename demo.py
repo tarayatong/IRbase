@@ -57,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=2, type=int)
+    parser.add_argument('--batch_size_train', default=4, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
     parser.add_argument('--update_mask_cache', default=True, type=bool)
@@ -409,6 +409,11 @@ def evaluate(net, valid_dataloaders):
                 batched_input.append(dict_input)
 
             outputs, masks, edges = net(batched_input)
+            visualize=False
+            if visualize:
+                [plt.imsave(f"vis_results/outputs{i}.png", outputs[i][0].cpu().detach()) for i in range(len(outputs))]
+                [plt.imsave(f"vis_results/labels_ori{i}.png", labels_ori[i][0].cpu().detach()) for i in range(len(labels_ori))]
+                [plt.imsave(f"vis_results/inputs_val{i}.png", inputs_val[i][0].cpu().detach()) for i in range(len(inputs_val))]
 
             torch.cuda.synchronize()
 
@@ -503,12 +508,12 @@ def train(net, train_dataloaders, optimizer, criterion):
         # 1. outputs用于IoU损失（DICE损失）
         iou_loss, _ = criterion(outputs, labels_ori/255.)
         # 2. masks用于BCE损失
-        bce_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
+        # bce_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
         # 3. bgs用于edge BCE损失
         edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
         
         # 组合总损失
-        loss = iou_loss + 10*bce_loss + 10*edge_loss
+        loss = iou_loss + 10*edge_loss
         loss.backward()
         optimizer.step()
 
