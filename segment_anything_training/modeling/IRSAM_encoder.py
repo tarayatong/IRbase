@@ -748,7 +748,7 @@ class TinyViT(nn.Module):
         x = x.permute(0, 3, 1, 2)
         x = self.neck(x)
         interm_feats = self.linear_interm(torch.cat(self.interm_feats, dim=1))
-        interm_feats += self.interm_ca(interm_feats)*interm_feats
+        interm_feats = interm_feats + self.interm_ca(interm_feats) * interm_feats
         return interm_feats, x
 
     def forward(self, x):
