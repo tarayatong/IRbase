@@ -508,7 +508,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
         
         # 组合总损失
-        loss = iou_loss + 10*bce_loss + 10*edge_loss
+        loss = iou_loss + 10*edge_loss
         loss.backward()
         optimizer.step()
 

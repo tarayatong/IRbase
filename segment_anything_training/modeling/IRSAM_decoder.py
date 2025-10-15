@@ -133,14 +133,14 @@ class MaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks (for BCE loss)
           torch.Tensor: batched predicted background/edges (for edge BCE loss)
         """
-        edge_features = edge_embeddings.permute(0, 3, 1, 2)
+        # edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        # edge_features = self.compress_vit_feat(edge_features)  # qian
+        edge_features = self.compress_vit_feat(edge_features)  # final
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg = self.predict_masks(
             image_embeddings=image_embeddings,
-            edge_embeddings=None,
+            edge_embeddings=edge_features,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
@@ -211,7 +211,7 @@ class MaskDecoder(nn.Module):
         # alpha = self.sigmoid(masks)
 
         # masks = masks*torch.sigmoid(masks - bg)
-        outputs = 2*masks-bg
+        outputs = masks-0.5*bg
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
