@@ -663,12 +663,12 @@ class TinyViT(nn.Module):
         )
         self.interm_feats = []
         # 定义各个neck模块用于中间特征处理
-        self.neck1 = Neck(embed_dims[0], 64)
-        self.neck2 = Neck(embed_dims[1], 64) 
+        self.neck1 = Neck(embed_dims[0], 64, stride=2)
+        self.neck2 = Neck(embed_dims[1], 64, stride=2)
         self.neck3 = Neck(embed_dims[2], 64)
         self.neck4 = Neck(embed_dims[2], 64)
-        self.linear_interm = nn.Conv2d(64 * 4, 160, kernel_size=1)
-        self.interm_ca = ChannelAttention(160)
+        self.linear_interm = nn.Conv2d(64 * 4, 256, kernel_size=1)
+        self.interm_ca = ChannelAttention(256)
     def set_layer_lr_decay(self, layer_lr_decay):
         decay_rate = layer_lr_decay
 
@@ -740,9 +740,9 @@ class TinyViT(nn.Module):
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)
                 x = self.linear2(torch.cat((x, f2), dim=-1))
-                self.interm_feats.append(self.neck3(x.reshape(x.shape[0], size*4, size*4, -1).permute(0, 3, 1, 2)))
+                self.interm_feats.append(self.neck3(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
             else:
-                self.interm_feats.append(self.neck4(x.reshape(x.shape[0], size*2, size*2, -1).permute(0, 3, 1, 2)))
+                self.interm_feats.append(self.neck4(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
         B, _, C = x.size()
         x = x.view(B, size, size, C)
         x = x.permute(0, 3, 1, 2)

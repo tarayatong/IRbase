@@ -83,8 +83,8 @@ class MaskDecoder(nn.Module):
 
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.compress_vit_feat = nn.Sequential(
-            DySample(160, scale=2),
-            nn.Conv2d(160, transformer_dim, kernel_size=3, padding=1),
+            DySample(256, scale=2),
+            nn.Conv2d(256, transformer_dim, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim),
             nn.GELU(),
             DySample(transformer_dim, scale=2),
@@ -135,7 +135,7 @@ class MaskDecoder(nn.Module):
         """
         # edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        edge_features = self.compress_vit_feat(edge_features)  # final
+        edge_features = self.compress_vit_feat(edge_embeddings)  # final
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg = self.predict_masks(
@@ -194,7 +194,7 @@ class MaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
 
-        edge_embedding = self.embedding_maskfeature(upscaled_embedding) #+ edge_embeddings.repeat(b, 1, 1, 1) # 
+        edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) #
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
