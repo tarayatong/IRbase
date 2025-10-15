@@ -543,7 +543,7 @@ class Neck(nn.Module):
         super(Neck, self).__init__()
         self.conv1 = nn.Conv2d(in_dim, out_dim, kernel_size=kernel_size, stride=stride, padding=padding)
         self.norm = LayerNorm2d(out_dim)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.GELU()
         
         # 通道注意力
         self.channel_attention = ChannelAttention(out_dim, reduction)
@@ -604,7 +604,11 @@ class TinyViT(nn.Module):
         # build layers
         self.pmd1 = PMD_features(in_dims=3, out_dims=embed_dims[0])
         self.pmd2 = PMD_features(in_dims=embed_dims[0], out_dims=embed_dims[0])
-        self.linear1 = nn.Conv2d(embed_dims[0] *2, embed_dims[0], kernel_size=1)
+        self.linear1 = nn.Sequential(
+            nn.Conv2d(embed_dims[0] * 2, embed_dims[0], kernel_size=1, bias=False),
+            LayerNorm2d(embed_dims[0]),
+            nn.GELU()
+        )
         self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
         self.layers_stride = [1,1,2]
@@ -666,7 +670,11 @@ class TinyViT(nn.Module):
         self.neck2 = Neck(embed_dims[1], 64, stride=2)
         self.neck3 = Neck(embed_dims[2], 64)
         self.neck4 = Neck(embed_dims[2], 64)
-        self.linear_interm = nn.Conv2d(64 * 4, 256, kernel_size=1)
+        self.linear_interm = nn.Sequential(
+            nn.Conv2d(64 * 4, 256, kernel_size=1, bias=False),
+            LayerNorm2d(256),
+            nn.GELU()
+        )
         self.interm_ca = ChannelAttention(256)
     def set_layer_lr_decay(self, layer_lr_decay):
         decay_rate = layer_lr_decay
@@ -748,7 +756,9 @@ class TinyViT(nn.Module):
         x = x.permute(0, 3, 1, 2)
         x = self.neck(x)
         interm_feats = self.linear_interm(torch.cat(interm_feats, dim=1))
-        interm_feats = interm_feats + self.interm_ca(interm_feats) * interm_feats
+        # 标准的通道注意力残差连接
+        ca_weight = self.interm_ca(interm_feats)
+        interm_feats = interm_feats * ca_weight
         return interm_feats, x
 
     def forward(self, x):
