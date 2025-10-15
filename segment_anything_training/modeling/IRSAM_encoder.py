@@ -661,7 +661,6 @@ class TinyViT(nn.Module):
             ),
             LayerNorm2d(256),
         )
-        self.interm_feats = []
         # 定义各个neck模块用于中间特征处理
         self.neck1 = Neck(embed_dims[0], 64, stride=2)
         self.neck2 = Neck(embed_dims[1], 64, stride=2)
@@ -720,16 +719,17 @@ class TinyViT(nn.Module):
         return {'attention_biases'}
 
     def forward_features(self, x):
-        # x: (N, C, H, W)   
+        # x: (N, C, H, W)
+        interm_feats = []
         size = self.img_size // self.patch_size  #
         f1 = self.pmd1(x)
         x0 = self.patch_embed(x)
         x1 = self.linear1(torch.cat((x0, f1), dim=1))
-        self.interm_feats.append(self.neck1(x1))
+        interm_feats.append(self.neck1(x1))
         f2 = self.pmd2(x1)
 
         x = self.layers[0](x1)
-        self.interm_feats.append(self.neck2(x.reshape(x.shape[0], size*2, size*2, -1).permute(0, 3, 1, 2)))
+        interm_feats.append(self.neck2(x.reshape(x.shape[0], size*2, size*2, -1).permute(0, 3, 1, 2)))
         start_i = 1
         for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
@@ -740,14 +740,14 @@ class TinyViT(nn.Module):
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)
                 x = self.linear2(torch.cat((x, f2), dim=-1))
-                self.interm_feats.append(self.neck3(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
+                interm_feats.append(self.neck3(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
             else:
-                self.interm_feats.append(self.neck4(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
+                interm_feats.append(self.neck4(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
         B, _, C = x.size()
         x = x.view(B, size, size, C)
         x = x.permute(0, 3, 1, 2)
         x = self.neck(x)
-        interm_feats = self.linear_interm(torch.cat(self.interm_feats, dim=1))
+        interm_feats = self.linear_interm(torch.cat(interm_feats, dim=1))
         interm_feats = interm_feats + self.interm_ca(interm_feats) * interm_feats
         return interm_feats, x
 
