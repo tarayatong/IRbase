@@ -537,32 +537,78 @@ class SpatialAttention(nn.Module):
         return self.sigmoid(x)
 
 
-class Neck(nn.Module):
-    """空间通道注意力模块 (Spatial-Channel Attention Module)"""
-    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=1, reduction=16):
-        super(Neck, self).__init__()
-        self.conv1 = nn.Conv2d(in_dim, out_dim, kernel_size=kernel_size, stride=stride, padding=padding)
-        self.norm = LayerNorm2d(out_dim)
-        self.relu = nn.GELU()
-        
-        # 通道注意力
-        self.channel_attention = ChannelAttention(out_dim, reduction)
-        # 空间注意力
-        self.spatial_attention = SpatialAttention()
+class ChannelShuffle(nn.Module):
+    """通道shuffle操作"""
+    def __init__(self, groups=2):
+        super(ChannelShuffle, self).__init__()
+        self.groups = groups
 
     def forward(self, x):
-        # 基础卷积
-        x = self.conv1(x)
+        batch_size, num_channels, height, width = x.size()
+        channels_per_group = num_channels // self.groups
+        
+        # 重塑为 [batch_size, groups, channels_per_group, height, width]
+        x = x.view(batch_size, self.groups, channels_per_group, height, width)
+        
+        # 转置并重塑回原始形状
+        x = x.transpose(1, 2).contiguous()
+        x = x.view(batch_size, -1, height, width)
+        
+        return x
+
+
+class Neck(nn.Module):
+    """改进的Neck组件：卷积+通道shuffle+分组CBAM"""
+    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=1, reduction=16):
+        super(Neck, self).__init__()
+        # 第一步：卷积将通道数变成out_dim的两倍
+        self.conv_expand = nn.Conv2d(in_dim, out_dim * 2, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.norm = LayerNorm2d(out_dim * 2)
+        self.relu = nn.GELU()
+        
+        # 通道shuffle
+        self.channel_shuffle = ChannelShuffle(groups=2)
+        
+        # 分组CBAM：只对一半通道进行CBAM处理
+        self.channel_attention = ChannelAttention(out_dim, reduction)  # 只处理一半通道
+        self.spatial_attention = SpatialAttention()
+        
+        # 最终输出卷积，将两倍通道压缩回out_dim
+        self.conv_output = nn.Conv2d(out_dim * 2, out_dim, kernel_size=1, bias=False)
+        self.norm_output = LayerNorm2d(out_dim)
+
+    def forward(self, x):
+        # 第一步：卷积扩展通道到out_dim的两倍
+        x = self.conv_expand(x)
         x = self.norm(x)
         x = self.relu(x)
         
+        # 第二步：通道shuffle
+        x = self.channel_shuffle(x)
+        
+        # 第三步：按通道切分成两组
+        channels = x.size(1)
+        half_channels = channels // 2
+        
+        # 分组处理
+        x_group1 = x[:, :half_channels, :, :]  # 第一组：不进行CBAM
+        x_group2 = x[:, half_channels:, :, :]   # 第二组：进行CBAM处理
+        
+        # 对第二组进行CBAM处理
         # 通道注意力
-        ca_weight = self.channel_attention(x)
-        x = x * ca_weight
+        ca_weight = self.channel_attention(x_group2)
+        x_group2 = x_group2 * ca_weight
         
         # 空间注意力
-        sa_weight = self.spatial_attention(x)
-        x = x * sa_weight
+        sa_weight = self.spatial_attention(x_group2)
+        x_group2 = x_group2 * sa_weight
+        
+        # 第四步：将两个分支的结果加起来
+        x_combined = torch.cat([x_group1, x_group2], dim=1)
+        
+        # 第五步：最终输出卷积，压缩回out_dim
+        x = self.conv_output(x_combined)
+        x = self.norm_output(x)
         
         return x
 
@@ -758,7 +804,7 @@ class TinyViT(nn.Module):
         interm_feats = self.linear_interm(torch.cat(interm_feats, dim=1))
         # 标准的通道注意力残差连接
         ca_weight = self.interm_ca(interm_feats)
-        interm_feats = interm_feats * ca_weight
+        interm_feats = interm_feats + interm_feats * ca_weight
         return interm_feats, x
 
     def forward(self, x):
