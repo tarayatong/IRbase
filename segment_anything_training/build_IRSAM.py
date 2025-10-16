@@ -15,10 +15,10 @@ def build_sam_IRSAM(checkpoint=None, use_mask_cache=False):
     image_embedding_size = image_size // vit_patch_size
     mobile_sam = EdgeIRSAM(
             image_encoder=EdgeEncoder(img_size=image_size, in_chans=3, num_classes=1000,
-                embed_dims=[64, 128, 160],
-                depths=[2, 2, 2],
-                num_heads=[2, 4, 5],
-                window_sizes=[7, 7, 14],
+                embed_dims=[64, 128, 160, 320],
+                depths=[2, 2, 2, 2],
+                num_heads=[2, 4, 5, 8],
+                window_sizes=[7, 7, 14, 7],
                 mlp_ratio=4.,
                 drop_rate=0.,
                 drop_path_rate=0.0,

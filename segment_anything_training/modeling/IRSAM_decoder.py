@@ -134,8 +134,8 @@ class MaskDecoder(nn.Module):
           torch.Tensor: batched predicted background/edges (for edge BCE loss)
         """
         # edge_features = edge_embeddings.permute(0, 3, 1, 2)
-        # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        edge_features = self.compress_vit_feat(edge_embeddings)  # final
+        edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_embeddings)  # qian+shen
+        # edge_features = self.compress_vit_feat(edge_embeddings)  # final
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg = self.predict_masks(

@@ -657,7 +657,7 @@ class TinyViT(nn.Module):
         )
         self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
-        self.layers_stride = [1,1,2]
+        self.layers_stride = [1,1,2, 2]
         for i_layer in range(self.num_layers):
             kwargs = dict(dim=embed_dims[i_layer],
                           input_resolution=(patches_resolution[0] // (2 ** (self.layers_stride[i_layer]-1)),
@@ -712,12 +712,12 @@ class TinyViT(nn.Module):
             LayerNorm2d(256),
         )
         # 定义各个neck模块用于中间特征处理
-        self.neck1 = Neck(embed_dims[0], 64, stride=2)
-        self.neck2 = Neck(embed_dims[1], 64, stride=2)
-        self.neck3 = Neck(embed_dims[2], 64)
-        self.neck4 = Neck(embed_dims[2], 64)
+        self.neck1 = Neck(embed_dims[0], embed_dims[0], stride=2)
+        self.neck2 = Neck(embed_dims[1], embed_dims[1], stride=2)
+        self.neck3 = Neck(embed_dims[2], embed_dims[2])
+        self.neck4 = Neck(embed_dims[3], embed_dims[3])
         self.linear_interm = nn.Sequential(
-            nn.Conv2d(64 * 4, 256, kernel_size=1, bias=False),
+            nn.Conv2d(sum(embed_dims), 256, kernel_size=1, bias=False),
             LayerNorm2d(256),
             nn.GELU()
         )
@@ -795,7 +795,7 @@ class TinyViT(nn.Module):
                 f2 = f2.flatten(2).transpose(1, 2)
                 x = self.linear2(torch.cat((x, f2), dim=-1))
                 interm_feats.append(self.neck3(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
-            else:
+            elif i == 2:
                 interm_feats.append(self.neck4(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
         B, _, C = x.size()
         x = x.view(B, size, size, C)
