@@ -543,7 +543,7 @@ class TinyViT(nn.Module):
         self.linear1 = nn.Conv2d(embed_dims[0] *2, embed_dims[0], kernel_size=1)
         self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
-        self.layers_stride = [1,1,2,2]
+        self.layers_stride = [1,1,2]
         for i_layer in range(self.num_layers):
             kwargs = dict(dim=embed_dims[i_layer],
                           input_resolution=(patches_resolution[0] // (2 ** (self.layers_stride[i_layer]-1)),
