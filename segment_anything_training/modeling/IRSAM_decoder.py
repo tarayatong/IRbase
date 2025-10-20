@@ -214,6 +214,8 @@ class MaskDecoder(nn.Module):
             masks_norm = masks / (masks.norm(dim=1, keepdim=True) + 1e-8)
             bg_norm = bg / (bg.norm(dim=1, keepdim=True) + 1e-8)
             alpha = (masks_norm * bg_norm).sum(dim=1, keepdim=True)  # [b, 1, w, h]
+            import matplotlib.pyplot as plt
+            plt.imsave("workdirs/alpha_cossim/alpha.png", alpha.squeeze().cpu().detach())
             outputs = (1+alpha)*masks - alpha*bg
         else:
             outputs = masks
