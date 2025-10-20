@@ -25,6 +25,7 @@ class MaskDecoder(nn.Module):
             iou_head_depth: int = 3,
             iou_head_hidden_dim: int = 256,
             mask_cache: bool = False,  # 新增参数
+            use_alpha: bool = False,  # 是否使用余弦相似度alpha融合输出
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -48,6 +49,7 @@ class MaskDecoder(nn.Module):
         self.transformer_dim = transformer_dim
         self.transformer = transformer
         self.mask_cache = mask_cache  # 新增属性
+        self.use_alpha = use_alpha
 
         self.num_multimask_outputs = num_multimask_outputs
 
@@ -208,14 +210,13 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
-        masks_norm = masks / (masks.norm(dim=1, keepdim=True) + 1e-8)
-        bg_norm = bg / (bg.norm(dim=1, keepdim=True) + 1e-8)
-        alpha = (masks_norm * bg_norm).sum(dim=1, keepdim=True)  # [b, 1, w, h]
-
-        # alpha = self.sigmoid(masks)
-
-        # masks = masks*torch.sigmoid(masks - bg)
-        outputs = (1+alpha)*masks-alpha*bg
+        if self.use_alpha:
+            masks_norm = masks / (masks.norm(dim=1, keepdim=True) + 1e-8)
+            bg_norm = bg / (bg.norm(dim=1, keepdim=True) + 1e-8)
+            alpha = (masks_norm * bg_norm).sum(dim=1, keepdim=True)  # [b, 1, w, h]
+            outputs = (1+alpha)*masks - alpha*bg
+        else:
+            outputs = masks
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)

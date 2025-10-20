@@ -299,6 +299,11 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=None)
             
+            # 从第50轮开始，启用基于余弦相似度的alpha融合输出
+            if epoch > 50:
+                print(f"启用基于余弦相似度的alpha融合输出 for epoch {epoch}")
+                net.mask_decoder.use_alpha = True
+
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
 
