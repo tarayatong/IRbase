@@ -323,8 +323,8 @@ class OnlineDataset(Dataset):
 
         # edge = cv2.Canny(gt, 100, 200)
         edge = cv2.Canny(im, 20, 80)
-        blurred = cv2.GaussianBlur(edge, (5, 5), 0)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))  # 半径 5 -> 直径 11
+        blurred = cv2.GaussianBlur(edge, (1, 1), 0)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))  # 半径 5 -> 直径 11
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         edge = (blurred > 0).astype(np.float32) * (1 - gt_dilated / 255.)
         im = torch.tensor(im.copy(), dtype=torch.float32)
