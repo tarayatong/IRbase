@@ -65,16 +65,9 @@ class MaskDecoder(nn.Module):
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
         )
-        self.output_hypernetworks_mlps = nn.ModuleList(
-            [
-                MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
-                for i in range(self.num_mask_tokens)
-            ]
-        )
-
-        self.iou_prediction_head = MLP(
-            transformer_dim, iou_head_hidden_dim, self.num_mask_tokens, iou_head_depth
-        )
+        # 直接卷积头生成 masks/bg（不再使用tokens超网络）
+        self.mask_head = nn.Conv2d(transformer_dim // 8, self.num_mask_tokens - 1, kernel_size=1)
+        self.bg_head = nn.Conv2d(transformer_dim // 8, 1, kernel_size=1)
 
         # edge tokens
         self.edge_token = nn.Embedding(1, transformer_dim)
@@ -107,6 +100,19 @@ class MaskDecoder(nn.Module):
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, stride=1, padding=1)
         )
         self.sigmoid = nn.Sigmoid()
+
+        # 简单的仅基于encoder输出的自注意力编码器（3层）
+        self.attn_dim = transformer_dim
+        self.attn_heads = 8
+        self.attn_layers = nn.ModuleList([
+            SelfAttentionBlock(self.attn_dim, self.attn_heads) for _ in range(3)
+        ])
+
+        # 无tokens分支：用全局上下文生成用于超网络的token表示
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.to_iou_token = nn.Linear(self.attn_dim, self.attn_dim)
+        # 生成 num_mask_tokens 个token（包含edge token在内）
+        self.to_mask_tokens = nn.Linear(self.attn_dim, self.attn_dim * (self.num_mask_tokens))
 
     def forward(
             self,
@@ -185,10 +191,17 @@ class MaskDecoder(nn.Module):
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
-        # Run the transformer
-        hs, src = self.transformer(src, pos_src, tokens)
-        iou_token_out = hs[:, 0, :]
-        mask_tokens_out = hs[:, 1: (1 + self.num_mask_tokens), :]
+        # 自注意力仅处理encoder特征，不使用tokens
+        # 输入 src: [B, C, H, W]
+        for blk in self.attn_layers:
+            src = blk(src)
+
+        # 基于全局上下文生成 iou_token 与 mask_tokens
+        # global_context: [B, C]
+        global_context = self.global_pool(src).flatten(1)
+        iou_token_out = self.to_iou_token(global_context)  # [B, C]
+        mask_tokens_flat = self.to_mask_tokens(global_context)  # [B, C * num_mask_tokens]
+        mask_tokens_out = mask_tokens_flat.view(b, self.num_mask_tokens, self.attn_dim)
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
@@ -196,25 +209,14 @@ class MaskDecoder(nn.Module):
 
         edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) #
 
-        hyper_in_list: List[torch.Tensor] = []
-        for i in range(self.num_mask_tokens):
-            if i < self.num_mask_tokens-1:
-                hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
-            else:
-                hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
-        hyper_in = torch.stack(hyper_in_list, dim=1)
-
-        b, c, h, w = upscaled_embedding.shape
-        masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
-        bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        # 直接通过卷积头得到 masks 和 bg
+        masks = self.mask_head(upscaled_embedding)
+        bg = self.bg_head(edge_embedding)
 
         # alpha = self.sigmoid(masks)
 
         # masks = masks*torch.sigmoid(masks - bg)
         outputs = masks-0.5*bg
-
-        # Generate mask quality predictions
-        iou_pred = self.iou_prediction_head(iou_token_out)
 
         return outputs, masks, bg
 
@@ -244,3 +246,30 @@ class MLP(nn.Module):
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
+
+
+class SelfAttentionBlock(nn.Module):
+    def __init__(self, dim: int, num_heads: int = 8) -> None:
+        super().__init__()
+        self.norm1 = nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, batch_first=True)
+        self.norm2 = nn.LayerNorm(dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(dim, dim * 4),
+            nn.GELU(),
+            nn.Linear(dim * 4, dim),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, C, H, W]
+        B, C, H, W = x.shape
+        # -> [B, H*W, C]
+        feat = x.flatten(2).transpose(1, 2)
+        feat = self.norm1(feat)
+        attn_out, _ = self.attn(feat, feat, feat, need_weights=False)
+        feat = feat + attn_out
+        feat = self.norm2(feat)
+        feat = feat + self.mlp(feat)
+        # -> [B, C, H, W]
+        feat = feat.transpose(1, 2).view(B, C, H, W)
+        return feat
