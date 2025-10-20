@@ -110,6 +110,13 @@ class MaskDecoder(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
+        # 用卷积直接预测alpha，输入为 [masks, bg] 按通道拼接
+        # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
+        self.alpha_head = nn.Sequential(
+            nn.Conv2d(self.num_mask_tokens, 1, kernel_size=3, padding=1, bias=False),
+            nn.Sigmoid(),
+        )
+
     def forward(
             self,
             image_embeddings: torch.Tensor,
@@ -211,12 +218,10 @@ class MaskDecoder(nn.Module):
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
         if self.use_alpha:
-            masks_norm = masks / (masks.norm(dim=1, keepdim=True) + 1e-8)
-            bg_norm = bg / (bg.norm(dim=1, keepdim=True) + 1e-8)
-            alpha = (masks_norm * bg_norm).sum(dim=1, keepdim=True)  # [b, 1, w, h]
-            import matplotlib.pyplot as plt
-            plt.imsave("workdirs/alpha_cossim/alpha.png", alpha.squeeze().cpu().detach())
-            outputs = (1+alpha)*masks - alpha*bg
+            # 卷积预测alpha
+            alpha_in = torch.cat([masks, bg], dim=1)
+            alpha = self.alpha_head(alpha_in)
+            outputs = (1 + alpha) * masks - alpha * bg
         else:
             outputs = masks
 
