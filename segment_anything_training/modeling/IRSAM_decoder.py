@@ -147,7 +147,7 @@ class MaskDecoder(nn.Module):
         # edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
-        outputs, masks, bg = self.predict_masks(
+        outputs, masks, bg, alpha = self.predict_masks(
             image_embeddings=image_embeddings,
             edge_embeddings=None,
             image_pe=image_pe,
@@ -165,7 +165,7 @@ class MaskDecoder(nn.Module):
         # iou_pred = iou_pred[:, mask_slice]
 
         # Prepare output
-        return outputs, masks, bg
+        return outputs, masks, bg, alpha
 
     def predict_masks(
             self,
@@ -221,14 +221,14 @@ class MaskDecoder(nn.Module):
             # 卷积预测alpha
             alpha_in = torch.cat([masks, bg], dim=1)
             alpha = self.alpha_head(alpha_in)
-            outputs = (1 + alpha) * masks - alpha * bg
+            outputs = (masks - alpha * bg)/(1-alpha)
         else:
             outputs = masks
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return outputs, masks, bg
+        return outputs, masks, bg, alpha
 
 
 # Lightly adapted from

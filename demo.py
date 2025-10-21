@@ -33,6 +33,7 @@ from utils.metric import PD_FA, ROCMetric
 from utils.loss_mask import DICE_loss
 from utils.log import initialize_logger
 from utils.mask_cache import MaskCache, generate_masks_for_dataset
+from utils.alpha_loss import alpha_loss
 import utils.misc as misc
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -179,6 +180,7 @@ def main(valid_datasets, args):
 
     optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate)
     criterion = DICE_loss  # Assuming you use DICE_loss for segmentation tasks
+    
     os.makedirs(args.output, exist_ok=True)
     
     # --- Step 4: Handle initial mask cache logic ---
@@ -502,18 +504,27 @@ def train(net, train_dataloaders, optimizer, criterion):
 
         # Forward pass
         optimizer.zero_grad()
-        outputs, masks, bgs = net(batched_input)
-
-        # Compute loss with three outputs
-        # 1. outputs用于IoU损失（DICE损失）
-        iou_loss, _ = criterion(outputs, labels_ori/255.)
-        # 2. masks用于BCE损失
-        bce_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
-        # 3. bgs用于edge BCE损失
-        edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
         
-        # 组合总损失
-        loss = iou_loss + 10*bce_loss + 10*edge_loss
+        # 检查是否使用alpha融合
+        if hasattr(net.mask_decoder, 'use_alpha') and net.mask_decoder.use_alpha:
+            outputs, masks, bgs, alpha = net(batched_input)
+            
+            # 计算IoU损失
+            iou_loss, _ = criterion(outputs, labels_ori/255.)
+            edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
+            alpha_loss= alpha_loss(masks, bgs, alpha, edges, labels_ori, iou_loss)
+            
+            # 使用Alpha损失函数
+            loss = iou_loss + 10*edge_loss + alpha_loss
+        else:
+            outputs, masks, bgs = net(batched_input)
+            
+            # 原始损失计算
+            iou_loss, _ = criterion(outputs, labels_ori/255.)
+            bce_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
+            edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
+            loss = iou_loss + 10*bce_loss + 10*edge_loss
+        
         loss.backward()
         optimizer.step()
 
