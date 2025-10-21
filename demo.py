@@ -410,7 +410,7 @@ def evaluate(net, valid_dataloaders):
 
                 batched_input.append(dict_input)
 
-            outputs, masks, edges = net(batched_input)
+            outputs, masks, edges, _ = net(batched_input)
 
             torch.cuda.synchronize()
 
@@ -508,7 +508,7 @@ def train(net, train_dataloaders, optimizer, criterion):
             iou_loss, _ = criterion(outputs, labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
             alpha_loss= AlphaLoss(masks, bgs, alpha, edges, labels_ori)
-            
+
             # 使用Alpha损失函数
             loss = iou_loss + 10*edge_loss + alpha_loss
         else:
