@@ -6,8 +6,9 @@ Alpha损失函数模块
 import torch
 import torch.nn.functional as F
 
-def alpha_loss(alpha, masks, bgs, labels_ori):
+def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     """
+    masks, bgs, alpha, edges, labels_ori
     计算alpha相关损失
     优化目标: (y-p)dot(y-q)/||(y-q)||，计算L2损失
     """
@@ -23,7 +24,7 @@ def alpha_loss(alpha, masks, bgs, labels_ori):
         labels_ori = labels_ori / 255.0
     p = masks  # [B, C, H, W] - 直接使用logits
     q = bgs    # [B, 1, H, W] - 直接使用logits
-    y = y.unsqueeze(1)  # [B, 1, H, W] 与q维度匹配
+    y = labels_ori  # [B, 1, H, W] 与q维度匹配
     
     # 计算 (y-p)dot(y-q)/||(y-q)||
     # 首先计算 y-p 和 y-q

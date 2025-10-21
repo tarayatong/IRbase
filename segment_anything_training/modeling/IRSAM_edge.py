@@ -115,7 +115,7 @@ class Sam(nn.Module):
                 masks=image_record.get("mask_inputs", None),
             )
 
-            output, low_res_mask, low_res_edge = self.mask_decoder(
+            output, low_res_mask, low_res_edge, alpha = self.mask_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 edge_embeddings=edge_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
@@ -144,13 +144,15 @@ class Sam(nn.Module):
                     "mask": mask,
                     "edge": edge,
                     "low_res_logits": low_res_mask,
+                    "alpha": alpha,
                 }
             )
         out_maps = torch.cat([x["output"] for x in outputs], dim=0)
         masks = torch.cat([x["mask"] for x in outputs], dim=0)
         edges = torch.cat([x["edge"] for x in outputs], dim=0)
+        alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
 
-        return out_maps, masks, edges
+        return out_maps, masks, edges, alphas
 
     def postprocess_masks(
         self,

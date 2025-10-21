@@ -33,7 +33,7 @@ from utils.metric import PD_FA, ROCMetric
 from utils.loss_mask import DICE_loss
 from utils.log import initialize_logger
 from utils.mask_cache import MaskCache, generate_masks_for_dataset
-from utils.alpha_loss import alpha_loss
+from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -58,7 +58,7 @@ def get_args_parser():
     parser.add_argument('--lr_drop_epoch', default=10, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
-    parser.add_argument('--batch_size_train', default=4, type=int)
+    parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
     parser.add_argument('--update_mask_cache', default=True, type=bool)
@@ -301,11 +301,6 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=None)
             
-            # 从第50轮开始，启用基于余弦相似度的alpha融合输出
-            if epoch > 50:
-                print(f"启用基于余弦相似度的alpha融合输出 for epoch {epoch}")
-                net.mask_decoder.use_alpha = True
-
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
 
@@ -512,7 +507,7 @@ def train(net, train_dataloaders, optimizer, criterion):
             # 计算IoU损失
             iou_loss, _ = criterion(outputs, labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
-            alpha_loss= alpha_loss(masks, bgs, alpha, edges, labels_ori, iou_loss)
+            alpha_loss= AlphaLoss(masks, bgs, alpha, edges, labels_ori)
             
             # 使用Alpha损失函数
             loss = iou_loss + 10*edge_loss + alpha_loss
