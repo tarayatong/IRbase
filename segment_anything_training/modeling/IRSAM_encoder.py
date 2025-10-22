@@ -8,6 +8,7 @@
 # --------------------------------------------------------
 
 import itertools
+from re import X
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -502,6 +503,115 @@ class LayerNorm2d(nn.Module):
         return x
 
 
+class ChannelAttention(nn.Module):
+    def __init__(self, in_channels, reduction=16):
+        super(ChannelAttention, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        
+        self.fc = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // reduction, 1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(in_channels // reduction, in_channels, 1, bias=False)
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = self.fc(self.avg_pool(x))
+        max_out = self.fc(self.max_pool(x))
+        out = avg_out + max_out
+        return self.sigmoid(out)
+
+
+class SpatialAttention(nn.Module):
+    def __init__(self, kernel_size=7):
+        super(SpatialAttention, self).__init__()
+        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=kernel_size//2, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x = torch.cat([avg_out, max_out], dim=1)
+        x = self.conv1(x)
+        return self.sigmoid(x)
+
+
+class ChannelShuffle(nn.Module):
+    """通道shuffle操作"""
+    def __init__(self, groups=2):
+        super(ChannelShuffle, self).__init__()
+        self.groups = groups
+
+    def forward(self, x):
+        batch_size, num_channels, height, width = x.size()
+        channels_per_group = num_channels // self.groups
+        
+        # 重塑为 [batch_size, groups, channels_per_group, height, width]
+        x = x.view(batch_size, self.groups, channels_per_group, height, width)
+        
+        # 转置并重塑回原始形状
+        x = x.transpose(1, 2).contiguous()
+        x = x.view(batch_size, -1, height, width)
+        
+        return x
+
+
+class Neck(nn.Module):
+    """改进的Neck组件：卷积+通道shuffle+分组CBAM"""
+    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=1, reduction=16):
+        super(Neck, self).__init__()
+        # 第一步：卷积将通道数变成out_dim的两倍
+        self.conv_expand = nn.Conv2d(in_dim, out_dim * 2, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.norm = LayerNorm2d(out_dim * 2)
+        self.relu = nn.GELU()
+        
+        # 通道shuffle
+        self.channel_shuffle = ChannelShuffle(groups=2)
+        
+        # 分组CBAM：只对一半通道进行CBAM处理
+        self.channel_attention = ChannelAttention(out_dim, reduction)  # 只处理一半通道
+        self.spatial_attention = SpatialAttention()
+        
+        # 最终输出卷积，将两倍通道压缩回out_dim
+        self.conv_output = nn.Conv2d(out_dim * 2, out_dim, kernel_size=1, bias=False)
+        self.norm_output = LayerNorm2d(out_dim)
+
+    def forward(self, x):
+        # 第一步：卷积扩展通道到out_dim的两倍
+        x = self.conv_expand(x)
+        x = self.norm(x)
+        x = self.relu(x)
+        
+        # 第二步：通道shuffle
+        x = self.channel_shuffle(x)
+        
+        # 第三步：按通道切分成两组
+        channels = x.size(1)
+        half_channels = channels // 2
+        
+        # 分组处理
+        x_group1 = x[:, :half_channels, :, :]  # 第一组：不进行CBAM
+        x_group2 = x[:, half_channels:, :, :]   # 第二组：进行CBAM处理
+        
+        # 对第二组进行CBAM处理
+        # 通道注意力
+        ca_weight = self.channel_attention(x_group2)
+        x_group2 = x_group2 * ca_weight
+        
+        # 空间注意力
+        sa_weight = self.spatial_attention(x_group2)
+        x_group2 = x_group2 * sa_weight
+        
+        # 第四步：将两个分支的结果加起来
+        x_combined = torch.cat([x_group1, x_group2], dim=1)
+        
+        # 第五步：最终输出卷积，压缩回out_dim
+        x = self.conv_output(x_combined)
+        x = self.norm_output(x)
+        
+        return x
+
 class TinyViT(nn.Module):
     def __init__(self, img_size=224, in_chans=3, num_classes=1000,
                  embed_dims=[96, 192, 384, 768], depths=[2, 2, 6, 2],
@@ -540,10 +650,14 @@ class TinyViT(nn.Module):
         # build layers
         self.pmd1 = PMD_features(in_dims=3, out_dims=embed_dims[0])
         self.pmd2 = PMD_features(in_dims=embed_dims[0], out_dims=embed_dims[0])
-        self.linear1 = nn.Conv2d(embed_dims[0] *2, embed_dims[0], kernel_size=1)
+        self.linear1 = nn.Sequential(
+            nn.Conv2d(embed_dims[0] * 2, embed_dims[0], kernel_size=1, bias=False),
+            LayerNorm2d(embed_dims[0]),
+            nn.GELU()
+        )
         self.linear2 = nn.Linear(embed_dims[0] +embed_dims[2], embed_dims[2])
         self.layers = nn.ModuleList()
-        self.layers_stride = [1,1,2,2]
+        self.layers_stride = [1,1,2, 2]
         for i_layer in range(self.num_layers):
             kwargs = dict(dim=embed_dims[i_layer],
                           input_resolution=(patches_resolution[0] // (2 ** (self.layers_stride[i_layer]-1)),
@@ -597,7 +711,17 @@ class TinyViT(nn.Module):
             ),
             LayerNorm2d(256),
         )
-
+        # 定义各个neck模块用于中间特征处理
+        self.neck1 = Neck(embed_dims[0], embed_dims[0], stride=2)
+        self.neck2 = Neck(embed_dims[1], embed_dims[1], stride=2)
+        self.neck3 = Neck(embed_dims[2], embed_dims[2])
+        self.neck4 = Neck(embed_dims[3], embed_dims[3])
+        self.linear_interm = nn.Sequential(
+            nn.Conv2d(sum(embed_dims), 256, kernel_size=1, bias=False),
+            LayerNorm2d(256),
+            nn.GELU()
+        )
+        self.interm_ca = ChannelAttention(256)
     def set_layer_lr_decay(self, layer_lr_decay):
         decay_rate = layer_lr_decay
 
@@ -649,14 +773,17 @@ class TinyViT(nn.Module):
         return {'attention_biases'}
 
     def forward_features(self, x):
-        # x: (N, C, H, W)   
-        size = self.img_size // self.patch_size  
+        # x: (N, C, H, W)
+        interm_feats = []
+        size = self.img_size // self.patch_size  #
         f1 = self.pmd1(x)
-        x = self.patch_embed(x)
-        x = self.linear1(torch.cat((x, f1), dim=1))
-        f2 = self.pmd2(x)
+        x0 = self.patch_embed(x)
+        x1 = self.linear1(torch.cat((x0, f1), dim=1))
+        interm_feats.append(self.neck1(x1))
+        f2 = self.pmd2(x1)
 
-        x = self.layers[0](x)
+        x = self.layers[0](x1)
+        interm_feats.append(self.neck2(x.reshape(x.shape[0], size*2, size*2, -1).permute(0, 3, 1, 2)))
         start_i = 1
         for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
@@ -667,11 +794,18 @@ class TinyViT(nn.Module):
                 interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)
                 x = self.linear2(torch.cat((x, f2), dim=-1))
+                interm_feats.append(self.neck3(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
+            elif i == 2:
+                interm_feats.append(self.neck4(x.reshape(x.shape[0], size, size, -1).permute(0, 3, 1, 2)))
         B, _, C = x.size()
         x = x.view(B, size, size, C)
         x = x.permute(0, 3, 1, 2)
         x = self.neck(x)
-        return x, interm_embedding
+        interm_feats = self.linear_interm(torch.cat(interm_feats, dim=1))
+        # 标准的通道注意力残差连接
+        ca_weight = self.interm_ca(interm_feats)
+        interm_feats = interm_feats + interm_feats * ca_weight
+        return interm_feats, x
 
     def forward(self, x):
         x = self.forward_features(x)

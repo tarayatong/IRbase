@@ -85,8 +85,8 @@ class MaskDecoder(nn.Module):
 
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.compress_vit_feat = nn.Sequential(
-            DySample(160, scale=2),
-            nn.Conv2d(160, transformer_dim, kernel_size=3, padding=1),
+            DySample(256, scale=2),
+            nn.Conv2d(256, transformer_dim, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim),
             nn.GELU(),
             DySample(transformer_dim, scale=2),
@@ -142,14 +142,14 @@ class MaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks (for BCE loss)
           torch.Tensor: batched predicted background/edges (for edge BCE loss)
         """
-        edge_features = edge_embeddings.permute(0, 3, 1, 2)
-        # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        # edge_features = self.compress_vit_feat(edge_features)  # qian
+        # edge_features = edge_embeddings.permute(0, 3, 1, 2)
+        edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_embeddings)  # qian+shen
+        # edge_features = self.compress_vit_feat(edge_embeddings)  # final
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg, alpha = self.predict_masks(
             image_embeddings=image_embeddings,
-            edge_embeddings=None,
+            edge_embeddings=edge_features,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
@@ -203,7 +203,7 @@ class MaskDecoder(nn.Module):
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
 
-        edge_embedding = self.embedding_maskfeature(upscaled_embedding) #+ edge_embeddings.repeat(b, 1, 1, 1) # 
+        edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) #
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -217,6 +217,7 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
+<<<<<<< HEAD
         masks_logits = torch.sigmoid(masks)
         bg_logits = torch.sigmoid(bg)
         if self.use_alpha:
@@ -226,6 +227,12 @@ class MaskDecoder(nn.Module):
             outputs = (masks_logits - alpha * bg_logits)/(1-alpha)
         else:
             outputs = masks_logits
+=======
+        # alpha = self.sigmoid(masks)
+
+        # masks = masks*torch.sigmoid(masks - bg)
+        outputs = masks-0.5*bg
+>>>>>>> 6f2920dcac4f24ff417192bab7905c2d225fdb87
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)

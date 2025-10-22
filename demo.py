@@ -522,6 +522,7 @@ def train(net, train_dataloaders, optimizer, criterion):
         # Forward pass
         optimizer.zero_grad()
         
+<<<<<<< HEAD
         # 检查是否使用alpha融合
         if hasattr(net.mask_decoder, 'use_alpha') and net.mask_decoder.use_alpha:
             outputs, masks, bgs, alpha = net(batched_input)
@@ -542,6 +543,10 @@ def train(net, train_dataloaders, optimizer, criterion):
             edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
             loss = iou_loss + 10*bce_loss + 10*edge_loss
         
+=======
+        # 组合总损失
+        loss = iou_loss + 10*edge_loss
+>>>>>>> 6f2920dcac4f24ff417192bab7905c2d225fdb87
         loss.backward()
         optimizer.step()
 
