@@ -104,7 +104,7 @@ def DICE_loss(
                  classification label for each element in inputs
                 (0 for the negative class and 1 for the positive class).
     """
-    inputs = inputs.sigmoid()
+    # inputs = inputs.sigmoid()
 
     inputs = inputs.view(-1)
     targets = targets.view(-1)

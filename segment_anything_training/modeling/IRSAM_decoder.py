@@ -217,18 +217,20 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
+        masks_logits = torch.sigmoid(masks)
+        bg_logits = torch.sigmoid(bg)
         if self.use_alpha:
             # 卷积预测alpha
             alpha_in = torch.cat([masks, bg], dim=1)
             alpha = self.alpha_head(alpha_in)
-            outputs = (masks - alpha * bg)/(1-alpha)
+            outputs = (masks_logits - alpha * bg_logits)/(1-alpha)
         else:
-            outputs = masks
+            outputs = masks_logits
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return outputs, masks, bg, alpha
+        return outputs, masks_logits, bg_logits, alpha
 
 
 # Lightly adapted from
