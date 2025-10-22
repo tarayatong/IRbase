@@ -61,7 +61,9 @@ def get_args_parser():
     parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
-    parser.add_argument('--update_mask_cache', default=True, type=bool)
+    parser.add_argument('--update_mask_cache', default=False, type=bool)
+    parser.add_argument('--mask_cache_update_freq', default=1, type=int,
+                        help="Frequency of mask cache updates. Update cache every k epochs. Default is 1 (every epoch).")
     parser.add_argument('--use_mask_cache', default=False, type=bool,
                         help="Whether to use mask cache during training. If False, disables all mask caching functionality.")
 
@@ -278,6 +280,7 @@ def main(valid_datasets, args):
                                                                            training=True,
                                                                            mask_cache=None)
             else:
+<<<<<<< HEAD
                 # 后续轮次使用上一轮训练的权重生成的mask_cache（如果启用）
                 if args.use_mask_cache and mask_cache.has_cache_for_epoch(epoch - 1):
                     print(f"Using cached masks from epoch {epoch - 1} as mask_inputs")
@@ -293,6 +296,37 @@ def main(valid_datasets, args):
                         print(f"Mask cache disabled, training epoch {epoch} without mask_inputs")
                     else:
                         print(f"No cached masks found for epoch {epoch - 1}, training without mask_inputs")
+=======
+                # 后续轮次使用最近一次更新的mask_cache（如果启用）
+                if args.use_mask_cache:
+                    # 找到最近一次更新的cache epoch
+                    latest_cache_epoch = None
+                    for check_epoch in range(epoch - 1, -1, -1):  # 从epoch-1往前查找
+                        if mask_cache.has_cache_for_epoch(check_epoch):
+                            latest_cache_epoch = check_epoch
+                            break
+                    
+                    if latest_cache_epoch is not None:
+                        print(f"Using cached masks from epoch {latest_cache_epoch} as mask_inputs")
+                        train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
+                                                                               my_transforms=[
+                                                                                   Resize(args.dataloader_size)
+                                                                               ],
+                                                                               batch_size=args.batch_size_train,
+                                                                               training=True,
+                                                                               mask_cache=mask_cache)
+                    else:
+                        print(f"No cached masks found for any previous epoch, training without mask_inputs")
+                        train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
+                                                                               my_transforms=[
+                                                                                   Resize(args.dataloader_size)
+                                                                               ],
+                                                                               batch_size=args.batch_size_train,
+                                                                               training=True,
+                                                                               mask_cache=None)
+                else:
+                    print(f"Mask cache disabled, training epoch {epoch} without mask_inputs")
+>>>>>>> 97fd51633133d1ed3d5e35ac92bc09844d8bc61e
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
                                                                            my_transforms=[
                                                                                Resize(args.dataloader_size)
@@ -304,9 +338,19 @@ def main(valid_datasets, args):
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
 
+<<<<<<< HEAD
             if args.use_mask_cache and args.update_mask_cache:
                 # 训练完成后，生成这个epoch的mask预测结果并保存
                 print(f"Generating masks for epoch {epoch}...")
+=======
+            # Check if we should update mask cache based on frequency
+            should_update_cache = (args.use_mask_cache and args.update_mask_cache and 
+                                 epoch % args.mask_cache_update_freq == 0)
+            
+            if should_update_cache:
+                # 训练完成后，生成这个epoch的mask预测结果并保存
+                print(f"Generating masks for epoch {epoch} (update frequency: every {args.mask_cache_update_freq} epochs)...")
+>>>>>>> 97fd51633133d1ed3d5e35ac92bc09844d8bc61e
                 try:
                     # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
                     mask_gen_dataloaders, _ = create_dataloaders(train_im_gt_list,
@@ -330,6 +374,11 @@ def main(valid_datasets, args):
                 print(f"Mask cache disabled, skipping mask generation for epoch {epoch}")
             elif not args.update_mask_cache:
                 print(f"Mask cache update disabled, skipping mask generation for epoch {epoch}")
+<<<<<<< HEAD
+=======
+            elif args.use_mask_cache and args.update_mask_cache:
+                print(f"Skipping mask cache update for epoch {epoch} (frequency: every {args.mask_cache_update_freq} epochs, next update: epoch {((epoch // args.mask_cache_update_freq) + 1) * args.mask_cache_update_freq})")
+>>>>>>> 97fd51633133d1ed3d5e35ac92bc09844d8bc61e
 
             # Evaluation step after each epoch
             print(f"Evaluating after epoch {epoch}...")

@@ -189,7 +189,11 @@ class MaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+<<<<<<< HEAD
         if self.training and self.mask_cache:
+=======
+        if self.training:
+>>>>>>> 97fd51633133d1ed3d5e35ac92bc09844d8bc61e
             src = src * (1+torch.sigmoid(dense_prompt_embeddings))
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
