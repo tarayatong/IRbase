@@ -546,7 +546,10 @@ def train(net, train_dataloaders, optimizer, criterion):
 =======
         # 组合总损失
         loss = iou_loss + 10*edge_loss
+<<<<<<< HEAD
 >>>>>>> 6f2920dcac4f24ff417192bab7905c2d225fdb87
+=======
+>>>>>>> betterbase
         loss.backward()
         optimizer.step()
 
