@@ -98,24 +98,12 @@ class MaskDecoder(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
-<<<<<<< HEAD
         # 用卷积直接预测alpha，输入为 [masks, bg] 按通道拼接
         # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
         self.alpha_head = nn.Sequential(
             nn.Conv2d(self.num_mask_tokens, 1, kernel_size=3, padding=1, bias=False),
             # nn.Sigmoid(),
         )
-=======
-        # 简单的仅基于encoder输出的自注意力编码器（3层）
-        self.attn_dim = transformer_dim
-        self.attn_heads = 8
-        self.attn_layers = nn.ModuleList([
-            SelfAttentionBlock(self.attn_dim, self.attn_heads) for _ in range(3)
-        ])
-
-        # 可选：保留全局池化（当前未使用）
-        self.global_pool = nn.AdaptiveAvgPool2d(1)
->>>>>>> betterbase
 
     def forward(
             self,
@@ -155,7 +143,6 @@ class MaskDecoder(nn.Module):
             dense_prompt_embeddings=dense_prompt_embeddings,
         )
 
-<<<<<<< HEAD
         # Select the correct mask or masks for output
         if multimask_output:
             mask_slice = slice(1, None)
@@ -167,9 +154,6 @@ class MaskDecoder(nn.Module):
 
         # Prepare output
         return outputs, masks, bg, alpha
-=======
-        return outputs, masks, bg
->>>>>>> betterbase
 
     def predict_masks(
             self,
@@ -186,23 +170,27 @@ class MaskDecoder(nn.Module):
           torch.Tensor: masks (for BCE loss) 
           torch.Tensor: bg (for edge BCE loss)
         """
-        # 仅处理encoder输出，不再拼接/扩展tokens或使用prompt
-        src = image_embeddings
+        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.edge_token.weight], dim=0)
+        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
+
+        # Expand per-image data in batch direction to be per-mask
+        src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+        if self.training and self.mask_cache:
+            src = src * (1+torch.sigmoid(dense_prompt_embeddings))
+        pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
-        # 自注意力仅处理encoder特征，不使用tokens
-        # 输入 src: [B, C, H, W]
-        for blk in self.attn_layers:
-            src = blk(src)
-
-        # 不再生成任何token表示
+        # Run the transformer
+        hs, src = self.transformer(src, pos_src, tokens)
+        iou_token_out = hs[:, 0, :]
+        mask_tokens_out = hs[:, 1: (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
 
-        edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) #
-<<<<<<< HEAD
+        edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) # 
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -211,15 +199,23 @@ class MaskDecoder(nn.Module):
             else:
                 hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
-=======
->>>>>>> betterbase
+
+        b, c, h, w = upscaled_embedding.shape
+        masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
+
+        hyper_in_list: List[torch.Tensor] = []
+        for i in range(self.num_mask_tokens):
+            if i < self.num_mask_tokens-1:
+                hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
+            else:
+                hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
+        hyper_in = torch.stack(hyper_in_list, dim=1)
 
         # 直接通过卷积头得到 masks 和 bg
         masks = self.mask_head(upscaled_embedding)
         bg = self.bg_head(edge_embedding)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         masks_logits = torch.sigmoid(masks)
         bg_logits = torch.sigmoid(bg)
         if self.use_alpha:
@@ -229,18 +225,6 @@ class MaskDecoder(nn.Module):
             outputs = (masks_logits - alpha * bg_logits)/(1-alpha)
         else:
             outputs = masks_logits
-=======
-        # alpha = self.sigmoid(masks)
-
-        # masks = masks*torch.sigmoid(masks - bg)
-        outputs = masks-0.5*bg
->>>>>>> 6f2920dcac4f24ff417192bab7905c2d225fdb87
-
-        # Generate mask quality predictions
-        iou_pred = self.iou_prediction_head(iou_token_out)
-=======
-        outputs = masks-0.5*bg
->>>>>>> betterbase
 
         return outputs, masks_logits, bg_logits, alpha
 
