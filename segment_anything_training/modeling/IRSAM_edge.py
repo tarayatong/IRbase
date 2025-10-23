@@ -113,6 +113,7 @@ class Sam(nn.Module):
                 points=None,
                 boxes=image_record.get("boxes", None),
                 masks=image_record.get("mask_inputs", None),
+                interm_embeddings=edge_embeddings.unsqueeze(0),
             )
 
             output, low_res_mask, low_res_edge, alpha = self.mask_decoder(

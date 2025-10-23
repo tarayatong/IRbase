@@ -170,21 +170,19 @@ class MaskDecoder(nn.Module):
           torch.Tensor: masks (for BCE loss) 
           torch.Tensor: bg (for edge BCE loss)
         """
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.edge_token.weight], dim=0)
+        output_tokens = torch.cat([self.mask_tokens.weight, self.edge_token.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
-        if self.training and self.mask_cache:
-            src = src * (1+torch.sigmoid(dense_prompt_embeddings))
+        src = src + dense_prompt_embeddings
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
         # Run the transformer
         hs, src = self.transformer(src, pos_src, tokens)
-        iou_token_out = hs[:, 0, :]
-        mask_tokens_out = hs[:, 1: (1 + self.num_mask_tokens), :]
+        mask_tokens_out = hs
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
@@ -203,14 +201,6 @@ class MaskDecoder(nn.Module):
         b, c, h, w = upscaled_embedding.shape
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
-
-        hyper_in_list: List[torch.Tensor] = []
-        for i in range(self.num_mask_tokens):
-            if i < self.num_mask_tokens-1:
-                hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
-            else:
-                hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
-        hyper_in = torch.stack(hyper_in_list, dim=1)
 
         # 直接通过卷积头得到 masks 和 bg
         masks = self.mask_head(upscaled_embedding)
