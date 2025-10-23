@@ -61,7 +61,7 @@ def get_args_parser():
     parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
-    parser.add_argument('--update_mask_cache', default=False, type=bool)
+    parser.add_argument('--update_mask_cache', default=True, type=bool)
     parser.add_argument('--mask_cache_update_freq', default=1, type=int,
                         help="Frequency of mask cache updates. Update cache every k epochs. Default is 1 (every epoch).")
     parser.add_argument('--use_mask_cache', default=False, type=bool,
@@ -528,13 +528,14 @@ def train(net, train_dataloaders, optimizer, criterion):
             
             # 计算IoU损失
             iou_loss, _ = criterion(outputs, labels_ori/255.)
-            edge_loss = F.binary_cross_entropy(bgs, edges/255.)
+            edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
+            mask_loss = F.binary_cross_entropy(torch.sigmoid(masks), labels_ori/255.)
             alpha_loss= AlphaLoss(masks, bgs, alpha, edges, labels_ori)
 
             # 使用Alpha损失函数
-            loss = iou_loss + 10*edge_loss + alpha_loss
+            loss = iou_loss + 10*edge_loss + 10*mask_loss + alpha_loss
         else:
-            outputs, masks, bgs = net(batched_input)
+            outputs, masks, bgs, _ = net(batched_input)
             
             # 原始损失计算
             iou_loss, _ = criterion(outputs, labels_ori/255.)
@@ -548,16 +549,16 @@ def train(net, train_dataloaders, optimizer, criterion):
         epoch_loss += loss.item()
 
         # Update metrics
-        IoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
-        nIoU_metric.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
+        miou = IoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
+        nIoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
         # Pd_Fa.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
 
         # FA, PD = Pd_Fa.get(len(train_dataloaders))
         _, IoU = IoU_metric.get()
         _, nIoU = nIoU_metric.get()
 
-        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f, '
-                             % (loss.item(), IoU, nIoU))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
+        tbar.set_description('Loss:%.8lf, IoU:%f, nIoU:%f, single_iou:%f'
+                             % (loss.item(), IoU, nIoU, miou))  # , PD:%.8lf, FA:%.8lf, PD[0], FA[0]
 
     # Calculate average loss for the epoch
     epoch_loss /= len(train_dataloaders)

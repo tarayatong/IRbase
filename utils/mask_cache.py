@@ -187,7 +187,7 @@ def generate_masks_for_dataset(net, dataloader, device='cuda'):
                 batched_input.append(dict_input)
             
             # 前向推理
-            outputs, masks, _ = net(batched_input)
+            outputs, masks, _, _ = net(batched_input)
             
             # 收集结果 - 使用outputs作为最终预测结果
             image_paths.extend(batch_paths)

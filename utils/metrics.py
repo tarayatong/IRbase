@@ -10,6 +10,8 @@ class SigmoidMetric():
         self.reset()
 
     def update(self, pred, labels):
+        labels[labels > 0.5] = 1
+        labels[labels <= 0.5] = 0
         correct, labeled = self.batch_pix_accuracy(pred, labels)
         inter, union = self.batch_intersection_union(pred, labels)
 
@@ -17,6 +19,7 @@ class SigmoidMetric():
         self.total_label += labeled
         self.total_inter += inter
         self.total_union += union
+        return inter/union
 
     def get(self):
         """Gets the current evaluation result."""

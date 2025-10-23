@@ -26,6 +26,7 @@ class MaskDecoder(nn.Module):
             iou_head_hidden_dim: int = 256,
             mask_cache: bool = False,  # 新增参数
             use_alpha: bool = False,  # 是否使用余弦相似度alpha融合输出
+            output_size: int = 512,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -52,8 +53,7 @@ class MaskDecoder(nn.Module):
         self.use_alpha = use_alpha
 
         # 输出mask数量（单/多掩码），不再使用任何token
-        self.num_multimask_outputs = num_multimask_outputs
-        self.num_output_masks = num_multimask_outputs + 1
+        self.num_mask_tokens = num_multimask_outputs + 1
 
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.output_upscaling = nn.Sequential(
@@ -66,11 +66,18 @@ class MaskDecoder(nn.Module):
             activation(),
         )
         # 直接卷积头生成 masks/bg（不再使用tokens超网络）
-        self.mask_head = nn.Conv2d(transformer_dim // 8, self.num_output_masks, kernel_size=1)
+        self.mask_head = nn.Conv2d(transformer_dim // 8, self.num_mask_tokens, kernel_size=1)
         self.bg_head = nn.Conv2d(transformer_dim // 8, 1, kernel_size=1)
 
-        # 移除所有token分支
-
+        self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
+        self.edge_token = nn.Embedding(1, transformer_dim)
+        self.edge_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+        self.output_hypernetworks_mlps = nn.ModuleList(
+            [
+                MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+                for i in range(self.num_mask_tokens)
+            ]
+        )
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.compress_vit_feat = nn.Sequential(
             DySample(256, scale=2),
@@ -101,9 +108,10 @@ class MaskDecoder(nn.Module):
         # 用卷积直接预测alpha，输入为 [masks, bg] 按通道拼接
         # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
         self.alpha_head = nn.Sequential(
-            nn.Conv2d(self.num_mask_tokens, 1, kernel_size=3, padding=1, bias=False),
-            # nn.Sigmoid(),
+            nn.Conv2d(self.num_mask_tokens+1, 1, kernel_size=3, padding=1, bias=False),
+            nn.Sigmoid(),
         )
+        self.alpha = nn.Parameter(torch.zeros(1, 1, output_size, output_size))
 
     def forward(
             self,
@@ -176,7 +184,7 @@ class MaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
-        src = src + dense_prompt_embeddings
+        # src = src + dense_prompt_embeddings
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
@@ -191,32 +199,28 @@ class MaskDecoder(nn.Module):
         edge_embedding = self.embedding_maskfeature(upscaled_embedding) + edge_embeddings.repeat(b, 1, 1, 1) # 
 
         hyper_in_list: List[torch.Tensor] = []
-        for i in range(self.num_mask_tokens):
-            if i < self.num_mask_tokens-1:
+        for i in range(self.num_mask_tokens+1):
+            if i < self.num_mask_tokens:
                 hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
             else:
                 hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
 
         b, c, h, w = upscaled_embedding.shape
-        masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
-        bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        masks = (hyper_in[:, :self.num_mask_tokens] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        bg = (hyper_in[:, self.num_mask_tokens:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
 
-        # 直接通过卷积头得到 masks 和 bg
-        masks = self.mask_head(upscaled_embedding)
-        bg = self.bg_head(edge_embedding)
-
-        masks_logits = torch.sigmoid(masks)
-        bg_logits = torch.sigmoid(bg)
         if self.use_alpha:
             # 卷积预测alpha
             alpha_in = torch.cat([masks, bg], dim=1)
             alpha = self.alpha_head(alpha_in)
-            outputs = (masks_logits - alpha * bg_logits)/(1-alpha)
+            outputs = (masks - alpha * bg)/(1-self.alpha)
+            return outputs, masks, bg, alpha
         else:
-            outputs = masks_logits
+            outputs = masks-0.5*bg
+            return outputs, masks, bg, None
 
-        return outputs, masks_logits, bg_logits, alpha
+
 
 
 # Lightly adapted from

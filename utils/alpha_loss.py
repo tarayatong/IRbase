@@ -13,17 +13,12 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     优化目标: (y-p)dot(y-q)/||(y-q)||，计算L2损失
     """
     # 确保输入格式正确
-    # p = masks (不需要激活，直接使用logits)
-    # q = bgs (不需要激活，直接使用logits) 
-    # y = labels_ori (需要归一化到0-1)
-    # if masks.max() > 1.0:
-    #     masks = torch.sigmoid(masks)
-    # if bgs.max() > 1.0:
-    #     bgs = torch.sigmoid(bgs)
     if labels_ori.max() > 1.0:
         labels_ori = labels_ori / 255.0
+    if edges.max() > 1.0:
+        edges = edges / 255.0
     p = masks  # [B, C, H, W] - 直接使用logits
-    q = bgs    # [B, 1, H, W] - 直接使用logits
+    q = edges    # [B, 1, H, W] - 直接使用logits
     y = labels_ori  # [B, 1, H, W] 与q维度匹配
     
     # 计算 (y-p)dot(y-q)/||(y-q)||
