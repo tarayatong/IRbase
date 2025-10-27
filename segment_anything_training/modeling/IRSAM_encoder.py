@@ -70,6 +70,7 @@ class PatchEmbed(nn.Module):
             Conv2d_BN(in_chans, n // 2, 3, 2, 1),
             activation(),
             Conv2d_BN(n // 2, n, 3, 1, 1),
+            activation(),
         )
 
     def forward(self, x):
@@ -127,7 +128,7 @@ class PatchMerging(nn.Module):
         self.act = activation()
         self.conv1 = Conv2d_BN(dim, out_dim, 1, 1, 0)
         stride_c = 2
-        if (out_dim == 320 or out_dim == 448 or out_dim == 576 or out_dim==128):
+        if (out_dim == 320 or out_dim == 448 or out_dim == 576 or out_dim==128 or out_dim==256):
             stride_c = 1
         self.conv2 = Conv2d_BN(out_dim, out_dim, 3, stride_c, 1, groups=out_dim)
         self.conv3 = Conv2d_BN(out_dim, out_dim, 1, 1, 0)
@@ -661,12 +662,10 @@ class TinyViT(nn.Module):
         for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
             x = layer(x)
-            # if i == 0:
-            #     interm_embedding = x.reshape(x.shape[0], size, size, -1)
             if i == 1:
-                interm_embedding = x.reshape(x.shape[0], size, size, -1)
                 f2 = f2.flatten(2).transpose(1, 2)
                 x = self.linear2(torch.cat((x, f2), dim=-1))
+                interm_embedding = x.reshape(x.shape[0], size, size, -1)
         B, _, C = x.size()
         x = x.view(B, size, size, C)
         x = x.permute(0, 3, 1, 2)

@@ -15,9 +15,9 @@ def build_sam_IRSAM(checkpoint=None, use_mask_cache=False):
     image_embedding_size = image_size // vit_patch_size
     mobile_sam = EdgeIRSAM(
             image_encoder=EdgeEncoder(img_size=image_size, in_chans=3, num_classes=1000,
-                embed_dims=[64, 128, 160, 320],
+                embed_dims=[64, 128, 160, 256],
                 depths=[2, 2, 2, 2],
-                num_heads=[2, 4, 5, 10],
+                num_heads=[2, 4, 5, 8],
                 window_sizes=[7, 7, 14, 7],
                 mlp_ratio=4.,
                 drop_rate=0.,
@@ -43,7 +43,7 @@ def build_sam_IRSAM(checkpoint=None, use_mask_cache=False):
                 ),
                 transformer_dim=prompt_embed_dim,
                 mask_cache=use_mask_cache,
-                use_alpha=True,
+                use_alpha=False,
             ),
             pixel_mean=[123.675, 116.28, 103.53],
             pixel_std=[58.395, 57.12, 57.375],

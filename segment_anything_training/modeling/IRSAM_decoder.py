@@ -101,12 +101,11 @@ class MaskDecoder(nn.Module):
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1)
         )
-        # 这里的ConvTranspose2d参数(3,1,1)实际上是普通卷积，直接用Conv2d替换
         self.embedding_maskfeature = nn.Sequential(
-            nn.Conv2d(transformer_dim // 8, transformer_dim // 4, kernel_size=3, stride=1, padding=1),
-            LayerNorm2d(transformer_dim // 4),
+            nn.Conv2d(160+transformer_dim, transformer_dim, kernel_size=3, stride=1, padding=1),
+            LayerNorm2d(transformer_dim),
             nn.GELU(),
-            nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, stride=1, padding=1)
+            nn.Conv2d(transformer_dim, transformer_dim, kernel_size=3, stride=1, padding=1)
         )
         self.sigmoid = nn.Sigmoid()
 
@@ -144,12 +143,13 @@ class MaskDecoder(nn.Module):
         """
         edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
+        image_embeddings =  self.embedding_maskfeature(torch.cat([image_embeddings, edge_features], dim=1))
         # edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
         outputs, masks, bg, alpha = self.predict_masks(
             image_embeddings=image_embeddings,
-            edge_embeddings=None,
+            edge_embeddings=self.compress_vit_feat(edge_features),
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
@@ -183,34 +183,30 @@ class MaskDecoder(nn.Module):
           torch.Tensor: bg (for edge BCE loss)
         """
         # Concatenate output tokens
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.edge_token.weight], dim=0)
+        output_tokens = torch.cat([self.mask_tokens.weight, self.edge_token.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
-        if self.training and self.mask_cache:
-            src = src * (1+torch.sigmoid(dense_prompt_embeddings))
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
         # Run the transformer
         hs, src = self.transformer(src, pos_src, tokens)
-        iou_token_out = hs[:, 0, :]
-        mask_tokens_out = hs[:, 1: (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
 
-        edge_embedding = self.embedding_maskfeature(upscaled_embedding) #+ edge_embeddings.repeat(b, 1, 1, 1) # 
+        edge_embedding = upscaled_embedding + edge_embeddings 
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
             if i < self.num_mask_tokens-1:
-                hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
+                hyper_in_list.append(self.output_hypernetworks_mlps[i](hs[:, i, :]))
             else:
-                hyper_in_list.append(self.edge_mlp(mask_tokens_out[:, i, :]))
+                hyper_in_list.append(self.edge_mlp(hs[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
 
         b, c, h, w = upscaled_embedding.shape
@@ -222,13 +218,11 @@ class MaskDecoder(nn.Module):
             alpha_in = torch.cat([masks, bg], dim=1)
             alpha = self.alpha_head(alpha_in)
             outputs = (masks - alpha * bg)/(1-alpha)
+            return outputs, masks, bg, alpha
         else:
-            outputs = masks
-
-        # Generate mask quality predictions
-        iou_pred = self.iou_prediction_head(iou_token_out)
-
-        return outputs, masks, bg, alpha
+            outputs = masks-0.5*bg
+            return outputs, masks, bg, None
+        
 
 
 # Lightly adapted from

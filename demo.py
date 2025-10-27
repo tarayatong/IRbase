@@ -512,7 +512,7 @@ def train(net, train_dataloaders, optimizer, criterion):
             # 使用Alpha损失函数
             loss = iou_loss + 10*edge_loss + alpha_loss
         else:
-            outputs, masks, bgs = net(batched_input)
+            outputs, masks, bgs, _ = net(batched_input)
             
             # 原始损失计算
             iou_loss, _ = criterion(outputs, labels_ori/255.)

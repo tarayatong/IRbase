@@ -150,7 +150,10 @@ class Sam(nn.Module):
         out_maps = torch.cat([x["output"] for x in outputs], dim=0)
         masks = torch.cat([x["mask"] for x in outputs], dim=0)
         edges = torch.cat([x["edge"] for x in outputs], dim=0)
-        alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
+        if hasattr(self.mask_decoder, 'use_alpha') and self.mask_decoder.use_alpha:
+            alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
+        else:
+            alphas = None
 
         return out_maps, masks, edges, alphas
 
