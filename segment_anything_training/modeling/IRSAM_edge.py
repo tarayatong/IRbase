@@ -115,47 +115,33 @@ class Sam(nn.Module):
                 masks=image_record.get("mask_inputs", None),
             )
 
-            output, low_res_mask, low_res_edge, alpha = self.mask_decoder(
+            output, img_embed, edge_embed, bg, alpha = self.mask_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 edge_embeddings=edge_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
             )
-            if low_res_mask.shape[-2:] != image_record["image"].shape[-2:]:
-              mask = self.postprocess_masks(
-                  low_res_mask,
-                  input_size=image_record["image"].shape[-2:],
-                  original_size=image_record["original_size"],
-              )
-
-              edge = self.postprocess_masks(
-                  low_res_edge,
-                  input_size=image_record["image"].shape[-2:],
-                  original_size=image_record["original_size"],
-              )
-            else:
-              mask = low_res_mask
-              edge = low_res_edge
 
             outputs.append(
                 {
                     "output": output,
-                    "mask": mask,
-                    "edge": edge,
-                    "low_res_logits": low_res_mask,
+                    "img_embed": img_embed,
+                    "edge_embed": edge_embed,
+                    "bg": bg,
                     "alpha": alpha,
                 }
             )
         out_maps = torch.cat([x["output"] for x in outputs], dim=0)
-        masks = torch.cat([x["mask"] for x in outputs], dim=0)
-        edges = torch.cat([x["edge"] for x in outputs], dim=0)
+        img_embed = torch.cat([x["img_embed"] for x in outputs], dim=0)
+        edge_embed = torch.cat([x["edge_embed"] for x in outputs], dim=0)
+        bgs = torch.cat([x["bg"] for x in outputs], dim=0)
         if hasattr(self.mask_decoder, 'use_alpha') and self.mask_decoder.use_alpha:
             alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
         else:
             alphas = None
 
-        return out_maps, masks, edges, alphas
+        return out_maps, img_embed, edge_embed, bgs, alphas
 
     def postprocess_masks(
         self,

@@ -116,7 +116,7 @@ class MaskDecoder(nn.Module):
             nn.BatchNorm2d(4),
             nn.GELU(),
             nn.Conv2d(4, 1, kernel_size=1, bias=False),
-            nn.Sigmoid(),
+            # nn.Sigmoid(),
         )
 
     def forward(
@@ -150,7 +150,7 @@ class MaskDecoder(nn.Module):
         # edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
-        outputs, masks, bg, alpha = self.predict_masks(
+        outputs, img_embed, edge_embed, bg, alpha = self.predict_masks(
             image_embeddings=image_embeddings,
             edge_embeddings=self.compress_vit_feat(edge_features),
             image_pe=image_pe,
@@ -158,17 +158,7 @@ class MaskDecoder(nn.Module):
             dense_prompt_embeddings=dense_prompt_embeddings,
         )
 
-        # Select the correct mask or masks for output
-        if multimask_output:
-            mask_slice = slice(1, None)
-        else:
-            mask_slice = slice(0, 1)
-        outputs = outputs[:, mask_slice, :, :]
-        masks = masks[:, mask_slice, :, :]
-        # iou_pred = iou_pred[:, mask_slice]
-
-        # Prepare output
-        return outputs, masks, bg, alpha
+        return outputs, img_embed, edge_embed, bg, alpha
 
     def predict_masks(
             self,
@@ -203,9 +193,9 @@ class MaskDecoder(nn.Module):
         upscaled_embedding = self.output_upscaling(src)
         # edge_embedding = upscalesd_embedding + edge_embeddings 
 
-        # alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
-        # alpha = self.alpha_head(alpha_in)
-        img_embedding = upscaled_embedding - 0.5*edge_embeddings
+        alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
+        alpha = self.alpha_head(alpha_in)
+        img_embedding = upscaled_embedding - alpha*edge_embeddings
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -221,10 +211,8 @@ class MaskDecoder(nn.Module):
 
         if self.use_alpha:
             # 卷积预测alpha
-            alpha_in = torch.cat([masks, bg], dim=1)
-            alpha = self.alpha_head(alpha_in)
-            outputs = (masks - alpha * bg)/(1-alpha)
-            return outputs, masks, bg, alpha
+            outputs = masks
+            return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         else:
             outputs = masks
             return outputs, masks, bg, None

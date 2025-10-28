@@ -16,36 +16,21 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # p = masks (不需要激活，直接使用logits)
     # q = bgs (不需要激活，直接使用logits) 
     # y = labels_ori (需要归一化到0-1)
-    masks_norm = torch.norm(masks, p=2, dim=1, keepdim=True)
-    bgs_norm = torch.norm(bgs, p=2, dim=1, keepdim=True)
-    labels_ori_norm = torch.norm(labels_ori, p=2, dim=1, keepdim=True)
-    p = masks_norm  # [B, C, H, W] - 直接使用logits
-    q = bgs_norm    # [B, 1, H, W] - 直接使用logits
-    y = labels_ori_norm  # [B, 1, H, W] 与q维度匹配
+    p = masks  # [B, C, H, W] - 直接使用logits
+    q = bgs    # [B, 1, H, W] - 直接使用logits
+    y = labels_ori.repeat(1, 32, 1, 1)/255.  # [B, 1, H, W] 与q维度匹配
+
+    # y_minus_p = y - p  # [B, C, H, W]
+    # y_minus_q = y - q  # [B, 1, H, W]
+    # dot_product = (y_minus_p * y_minus_q).sum(dim=1, keepdim=True)  # [B, 1, H, W]
+    # y_minus_q_norm = torch.norm(y_minus_q, p=2, dim=1, keepdim=True)  # [B, 1, H, W]
+    # epsilon = 1e-8
+    # y_minus_q_norm = torch.clamp(y_minus_q_norm, min=epsilon)
+    # # 计算目标值: (y-p)dot(y-q)/||(y-q)||
+    # target = dot_product / y_minus_q_norm  # [B, 1, H, W]
     
-    # 计算 (y-p)dot(y-q)/||(y-q)||
-    # 首先计算 y-p 和 y-q
-    y_minus_p = y - p  # [B, C, H, W]
-    y_minus_q = y - q  # [B, 1, H, W]
-    
-    # 计算点积 (y-p)dot(y-q)
-    # 需要将y_minus_p和y_minus_q在通道维度上对齐
-    if y_minus_p.shape[1] != y_minus_q.shape[1]:
-        # 如果通道数不匹配，将y_minus_q扩展到与y_minus_p相同的通道数
-        y_minus_q = y_minus_q.expand_as(y_minus_p)
-    
-    dot_product = (y_minus_p * y_minus_q).sum(dim=1, keepdim=True)  # [B, 1, H, W]
-    
-    # 计算 ||(y-q)|| 的L2范数
-    y_minus_q_norm = torch.norm(y_minus_q, p=2, dim=1, keepdim=True)  # [B, 1, H, W]
-    
-    # 避免除零，添加小的epsilon
-    epsilon = 1e-8
-    y_minus_q_norm = torch.clamp(y_minus_q_norm, min=epsilon)
-    
-    # 计算目标值: (y-p)dot(y-q)/||(y-q)||
-    target = dot_product / y_minus_q_norm  # [B, 1, H, W]
-    
+    target = ((p-y)*q).sum(dim=1, keepdim=True)/(torch.norm(q, p=2, dim=1, keepdim=True)+1e-8)
+
     # 计算alpha与目标值的L2损失
     alpha_loss_val = F.mse_loss(alpha, target)
     
