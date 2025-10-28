@@ -29,10 +29,13 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # # 计算目标值: (y-p)dot(y-q)/||(y-q)||
     # target = dot_product / y_minus_q_norm  # [B, 1, H, W]
     
-    target = ((p-y)*q).sum(dim=1, keepdim=True)/(torch.norm(q, p=2, dim=1, keepdim=True)+1e-8)
-
+    target1 = (y*(p-q)).sum(dim=1, keepdim=True)
+    p_norm = torch.norm(p, p=2, dim=1, keepdim=True)
+    q_norm = torch.norm(q, p=2, dim=1, keepdim=True)
+    p_dot_q = (p*q).sum(dim=1, keepdim=True)
+    target2 = (1+alpha)*p_norm+alpha*q_norm-(1+2*alpha)*p_dot_q
     # 计算alpha与目标值的L2损失
-    alpha_loss_val = F.mse_loss(alpha, target)
+    alpha_loss_val = F.mse_loss(target1, target2)
     
     return alpha_loss_val
 
