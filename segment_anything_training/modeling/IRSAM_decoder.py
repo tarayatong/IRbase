@@ -102,7 +102,7 @@ class MaskDecoder(nn.Module):
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1)
         )
         self.embedding_maskfeature = nn.Sequential(
-            nn.Conv2d(160+transformer_dim, transformer_dim, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(160, transformer_dim, kernel_size=3, stride=1, padding=1),
             LayerNorm2d(transformer_dim),
             nn.GELU(),
             nn.Conv2d(transformer_dim, transformer_dim, kernel_size=3, stride=1, padding=1)
@@ -112,7 +112,10 @@ class MaskDecoder(nn.Module):
         # 用卷积直接预测alpha，输入为 [masks, bg] 按通道拼接
         # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
         self.alpha_head = nn.Sequential(
-            nn.Conv2d(self.num_mask_tokens, 1, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(transformer_dim//4, 4, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(4),
+            nn.GELU(),
+            nn.Conv2d(4, 1, kernel_size=1, bias=False),
             nn.Sigmoid(),
         )
 
@@ -143,7 +146,7 @@ class MaskDecoder(nn.Module):
         """
         edge_features = edge_embeddings.permute(0, 3, 1, 2)
         # edge_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(edge_features)  # qian+shen
-        image_embeddings =  self.embedding_maskfeature(torch.cat([image_embeddings, edge_features], dim=1))
+        image_embeddings =  self.embedding_maskfeature(edge_features)
         # edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
@@ -198,8 +201,11 @@ class MaskDecoder(nn.Module):
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
+        # edge_embedding = upscalesd_embedding + edge_embeddings 
 
-        edge_embedding = upscaled_embedding + edge_embeddings 
+        alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
+        alpha = self.alpha_head(alpha_in)
+        img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -209,9 +215,9 @@ class MaskDecoder(nn.Module):
                 hyper_in_list.append(self.edge_mlp(hs[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
 
-        b, c, h, w = upscaled_embedding.shape
-        masks = (hyper_in[:, :self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
-        bg = (hyper_in[:, self.num_mask_tokens-1:] @ edge_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        b, c, h, w = img_embedding.shape
+        masks = (hyper_in[:, :self.num_mask_tokens-1] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        bg = (hyper_in[:, self.num_mask_tokens-1:] @ (img_embedding+edge_embeddings).view(b, c, h * w)).view(b, -1, h, w)
 
         if self.use_alpha:
             # 卷积预测alpha
@@ -220,7 +226,7 @@ class MaskDecoder(nn.Module):
             outputs = (masks - alpha * bg)/(1-alpha)
             return outputs, masks, bg, alpha
         else:
-            outputs = masks-0.5*bg
+            outputs = masks
             return outputs, masks, bg, None
         
 

@@ -16,15 +16,12 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # p = masks (不需要激活，直接使用logits)
     # q = bgs (不需要激活，直接使用logits) 
     # y = labels_ori (需要归一化到0-1)
-    # if masks.max() > 1.0:
-    #     masks = torch.sigmoid(masks)
-    # if bgs.max() > 1.0:
-    #     bgs = torch.sigmoid(bgs)
-    if labels_ori.max() > 1.0:
-        labels_ori = labels_ori / 255.0
-    p = masks  # [B, C, H, W] - 直接使用logits
-    q = bgs    # [B, 1, H, W] - 直接使用logits
-    y = labels_ori  # [B, 1, H, W] 与q维度匹配
+    masks_norm = torch.norm(masks, p=2, dim=1, keepdim=True)
+    bgs_norm = torch.norm(bgs, p=2, dim=1, keepdim=True)
+    labels_ori_norm = torch.norm(labels_ori, p=2, dim=1, keepdim=True)
+    p = masks_norm  # [B, C, H, W] - 直接使用logits
+    q = bgs_norm    # [B, 1, H, W] - 直接使用logits
+    y = labels_ori_norm  # [B, 1, H, W] 与q维度匹配
     
     # 计算 (y-p)dot(y-q)/||(y-q)||
     # 首先计算 y-p 和 y-q
