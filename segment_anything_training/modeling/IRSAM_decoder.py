@@ -203,9 +203,9 @@ class MaskDecoder(nn.Module):
         upscaled_embedding = self.output_upscaling(src)
         # edge_embedding = upscalesd_embedding + edge_embeddings 
 
-        alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
-        alpha = self.alpha_head(alpha_in)
-        img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+        # alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
+        # alpha = self.alpha_head(alpha_in)
+        img_embedding = upscaled_embedding - 0.5*edge_embeddings
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
