@@ -113,7 +113,7 @@ class MaskDecoder(nn.Module):
         # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
         self.alpha_head = nn.Sequential(
             nn.Conv2d(self.num_mask_tokens, 1, kernel_size=3, padding=1, bias=False),
-            # nn.Sigmoid(),
+            nn.Sigmoid(),
         )
 
     def forward(
