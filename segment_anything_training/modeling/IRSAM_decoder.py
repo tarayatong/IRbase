@@ -116,7 +116,8 @@ class MaskDecoder(nn.Module):
             nn.BatchNorm2d(4),
             nn.GELU(),
             nn.Conv2d(4, 1, kernel_size=1, bias=False),
-            # nn.Sigmoid(),
+            # nn.BatchNorm2d(1),
+            nn.ReLU(),
         )
 
     def forward(
@@ -211,7 +212,7 @@ class MaskDecoder(nn.Module):
 
         if self.use_alpha:
             # 卷积预测alpha
-            outputs = masks
+            outputs = 2*masks-bg
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         else:
             outputs = masks

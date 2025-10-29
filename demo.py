@@ -23,7 +23,7 @@ import random
 from typing import Dict, List, Tuple
 
 from thop import profile
-
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 from segment_anything_training.build_IRSAM import build_sam_IRSAM
 
 from utils.dataloader import get_im_gt_name_dict, create_dataloaders, RandomHFlip, Resize, LargeScaleJitter, \
@@ -36,7 +36,7 @@ from utils.mask_cache import MaskCache, generate_masks_for_dataset
 from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def get_args_parser():
@@ -55,7 +55,7 @@ def get_args_parser():
 
     parser.add_argument('--learning_rate', default=1e-4, type=float)
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--lr_drop_epoch', default=10, type=int)
+    parser.add_argument('--lr_drop_epoch', default=50, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
     parser.add_argument('--batch_size_train', default=2, type=int)
@@ -179,6 +179,7 @@ def main(valid_datasets, args):
         net.cuda()
 
     optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate)
+    scheduler = StepLR(optimizer, step_size=args.lr_drop_epoch, gamma=0.5)
     criterion = DICE_loss  # Assuming you use DICE_loss for segmentation tasks
     
     os.makedirs(args.output, exist_ok=True)
@@ -303,7 +304,7 @@ def main(valid_datasets, args):
             
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
-
+            scheduler.step()
             if args.use_mask_cache and args.update_mask_cache:
                 # 训练完成后，生成这个epoch的mask预测结果并保存
                 print(f"Generating masks for epoch {epoch}...")
@@ -503,15 +504,14 @@ def train(net, train_dataloaders, optimizer, criterion):
         # 检查是否使用alpha融合
         if hasattr(net.mask_decoder, 'use_alpha') and net.mask_decoder.use_alpha:
             outputs, img_embed, edge_embed, bgs, alpha = net(batched_input)
-            
-            # 计算IoU损失
+
             iou_loss, _ = criterion(outputs, labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
             alpha_loss= AlphaLoss(img_embed, edge_embed, alpha, edges, labels_ori)
 
             # 使用Alpha损失函数
-            loss = iou_loss + 10*edge_loss + alpha_loss
+            loss = iou_loss + 10*bce_loss + 10*edge_loss + alpha_loss
         else:
             outputs, masks, bgs, _ = net(batched_input)
             

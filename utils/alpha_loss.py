@@ -7,27 +7,18 @@ import torch
 import torch.nn.functional as F
 
 def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
-    """
-    masks, bgs, alpha, edges, labels_ori
-    计算alpha相关损失
-    优化目标: (y-p)dot(y-q)/||(y-q)||，计算L2损失
-    """
-    # 确保输入格式正确
-    # p = masks (不需要激活，直接使用logits)
-    # q = bgs (不需要激活，直接使用logits) 
-    # y = labels_ori (需要归一化到0-1)
-    
-    # 对每个像素的C维向量进行归一化到[0,1]
+    # masks = masks.detach()
+    # bgs = bgs.detach()
     # masks: [B, C, H, W]，对每个(b,h,w)位置的C维向量单独归一化
     p_min = masks.min(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最小值
     p_max = masks.max(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最大值
     p = (masks - p_min) / (p_max - p_min + 1e-8)  # [B, C, H, W] - 每个像素向量归一化到[0,1]
-    
+
     # bgs同样处理
     q_min = bgs.min(dim=1, keepdim=True)[0]  # [B, 1, H, W]
     q_max = bgs.max(dim=1, keepdim=True)[0]  # [B, 1, H, W]
     q = (bgs - q_min) / (q_max - q_min + 1e-8)  # [B, C, H, W] - 每个像素向量归一化到[0,1]
-    
+
     y = labels_ori.repeat(1, 32, 1, 1)/255.  # [B, 32, H, W] 与p维度匹配
 
     # y_minus_p = y - p  # [B, C, H, W]
@@ -40,10 +31,10 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # target = dot_product / y_minus_q_norm  # [B, 1, H, W]
     
     target1 = (y*(p-q)).sum(dim=1, keepdim=True)
-    p_norm = torch.norm(p, p=2, dim=1, keepdim=True)
-    q_norm = torch.norm(q, p=2, dim=1, keepdim=True)
-    p_dot_q = (p*q).sum(dim=1, keepdim=True)
-    target2 = (1+alpha)*p_norm+alpha*q_norm-(1+2*alpha)*p_dot_q
+    # p_norm = (p * p).sum(dim=1, keepdim=True)
+    # q_norm = (q * q).sum(dim=1, keepdim=True)
+    # p_dot_q = (p*q).sum(dim=1, keepdim=True)
+    # target2 = (1+alpha)*p_norm+alpha*q_norm-(1+2*alpha)*p_dot_q
     target2 = (((1+alpha)*p-alpha*q)*(p-q)).sum(dim=1, keepdim=True)
     # 计算alpha与目标值的L2损失
     alpha_loss_val = F.mse_loss(target1, target2)
