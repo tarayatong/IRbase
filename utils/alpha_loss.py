@@ -16,9 +16,19 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # p = masks (不需要激活，直接使用logits)
     # q = bgs (不需要激活，直接使用logits) 
     # y = labels_ori (需要归一化到0-1)
-    p = masks  # [B, C, H, W] - 直接使用logits
-    q = bgs    # [B, 1, H, W] - 直接使用logits
-    y = labels_ori.repeat(1, 32, 1, 1)/255.  # [B, 1, H, W] 与q维度匹配
+    
+    # 对每个像素的C维向量进行归一化到[0,1]
+    # masks: [B, C, H, W]，对每个(b,h,w)位置的C维向量单独归一化
+    p_min = masks.min(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最小值
+    p_max = masks.max(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最大值
+    p = (masks - p_min) / (p_max - p_min + 1e-8)  # [B, C, H, W] - 每个像素向量归一化到[0,1]
+    
+    # bgs同样处理
+    q_min = bgs.min(dim=1, keepdim=True)[0]  # [B, 1, H, W]
+    q_max = bgs.max(dim=1, keepdim=True)[0]  # [B, 1, H, W]
+    q = (bgs - q_min) / (q_max - q_min + 1e-8)  # [B, C, H, W] - 每个像素向量归一化到[0,1]
+    
+    y = labels_ori.repeat(1, 32, 1, 1)/255.  # [B, 32, H, W] 与p维度匹配
 
     # y_minus_p = y - p  # [B, C, H, W]
     # y_minus_q = y - q  # [B, 1, H, W]
@@ -34,6 +44,7 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     q_norm = torch.norm(q, p=2, dim=1, keepdim=True)
     p_dot_q = (p*q).sum(dim=1, keepdim=True)
     target2 = (1+alpha)*p_norm+alpha*q_norm-(1+2*alpha)*p_dot_q
+    target2 = (((1+alpha)*p-alpha*q)*(p-q)).sum(dim=1, keepdim=True)
     # 计算alpha与目标值的L2损失
     alpha_loss_val = F.mse_loss(target1, target2)
     
