@@ -23,7 +23,7 @@ import random
 from typing import Dict, List, Tuple
 
 from thop import profile
-from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
+# from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
 from segment_anything_training.build_IRSAM import build_sam_IRSAM
 
 from utils.dataloader import get_im_gt_name_dict, create_dataloaders, RandomHFlip, Resize, LargeScaleJitter, \
@@ -179,7 +179,7 @@ def main(valid_datasets, args):
         net.cuda()
 
     optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate)
-    scheduler = StepLR(optimizer, step_size=args.lr_drop_epoch, gamma=0.5)
+    # scheduler = StepLR(optimizer, step_size=args.lr_drop_epoch, gamma=0.5)
     criterion = DICE_loss  # Assuming you use DICE_loss for segmentation tasks
     
     os.makedirs(args.output, exist_ok=True)
@@ -304,7 +304,7 @@ def main(valid_datasets, args):
             
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
-            scheduler.step()
+            # scheduler.step()
             if args.use_mask_cache and args.update_mask_cache:
                 # 训练完成后，生成这个epoch的mask预测结果并保存
                 print(f"Generating masks for epoch {epoch}...")
