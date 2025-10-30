@@ -131,11 +131,9 @@ def check_checkpoint_compatibility(net, checkpoint_path):
 def evaluate_save_masks(valid_datasets, args):
     valid_im_gt_list = get_im_gt_name_list(valid_datasets, flag="valid")
     valid_dataloaders, valid_datasets = create_dataloaders(valid_im_gt_list,
-                                                           my_transforms=[
-                                                               Resize(args.dataloader_size)
-                                                           ],
                                                            batch_size=args.batch_size_valid,
-                                                           training=False)
+                                                           training=False,
+                                                           img_size=args.dataloader_size[0])
     net = build_sam_IRSAM(checkpoint=args.checkpoint)
     if torch.cuda.is_available():
         net.cuda()
@@ -166,11 +164,9 @@ def main(valid_datasets, args):
     print("--- create valid dataloader ---")
     valid_im_gt_list = get_im_gt_name_list(valid_datasets, flag="valid")
     valid_dataloaders, valid_datasets = create_dataloaders(valid_im_gt_list,
-                                                           my_transforms=[
-                                                               Resize(args.dataloader_size)
-                                                           ],
                                                            batch_size=args.batch_size_valid,
-                                                           training=False)
+                                                           training=False,
+                                                           img_size=args.dataloader_size[0])
     print(len(valid_dataloaders), " valid dataloaders created")
 
     # --- Step 3: Load pretrained Network---
@@ -203,12 +199,10 @@ def main(valid_datasets, args):
                     try:
                         # 创建用于生成初始mask的数据加载器
                         initial_mask_dataloaders, _ = create_dataloaders(train_im_gt_list,
-                                                                       my_transforms=[
-                                                                           Resize(args.dataloader_size)
-                                                                       ],
                                                                        batch_size=args.batch_size_valid,
                                                                        training=True,
-                                                                       mask_cache=None)  # 不使用cache
+                                                                       mask_cache=None,
+                                                                        img_size=args.dataloader_size[0])  # 不使用cache
                         
                         # 使用checkpoint生成初始mask预测结果
                         image_paths, predicted_masks = generate_masks_for_dataset(net, initial_mask_dataloaders)
@@ -260,35 +254,29 @@ def main(valid_datasets, args):
                 if args.use_mask_cache and initial_cache_available:
                     print(f"Using available initial mask cache as mask_inputs for epoch 1")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
-                                                                           my_transforms=[
-                                                                               Resize(args.dataloader_size)
-                                                                           ],
                                                                            batch_size=args.batch_size_train,
                                                                            training=True,
-                                                                           mask_cache=mask_cache)
+                                                                           mask_cache=mask_cache,
+                                                                           img_size=args.dataloader_size[0])
                 else:
                     if not args.use_mask_cache:
                         print("Mask cache disabled, training epoch 1 without mask_inputs")
                     else:
                         print("No initial mask cache available, training epoch 1 without mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
-                                                                           my_transforms=[
-                                                                               Resize(args.dataloader_size)
-                                                                           ],
                                                                            batch_size=args.batch_size_train,
                                                                            training=True,
-                                                                           mask_cache=None)
+                                                                           mask_cache=None,
+                                                                           img_size=args.dataloader_size[0])
             else:
                 # 后续轮次使用上一轮训练的权重生成的mask_cache（如果启用）
                 if args.use_mask_cache and mask_cache.has_cache_for_epoch(epoch - 1):
                     print(f"Using cached masks from epoch {epoch - 1} as mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
-                                                                           my_transforms=[
-                                                                               Resize(args.dataloader_size)
-                                                                           ],
                                                                            batch_size=args.batch_size_train,
                                                                            training=True,
-                                                                           mask_cache=mask_cache)
+                                                                           mask_cache=mask_cache,
+                                                                           img_size=args.dataloader_size[0])
                 else:
                     if not args.use_mask_cache:
                         print(f"Mask cache disabled, training epoch {epoch} without mask_inputs")
