@@ -194,7 +194,7 @@ class RandomBrightnessContrast(object):
             
         # 随机调整亮度
         if random.random() <= self.prob:
-            brightness_factor = random.uniform(-self.brightness_range, self.brightness_range) * 255.0
+            brightness_factor = random.uniform(-self.brightness_range, self.brightness_range) * image.max()
             image = image + brightness_factor
             image = torch.clamp(image, 0, 255)
         result = {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': shape, 'mask_inputs': mask_inputs}

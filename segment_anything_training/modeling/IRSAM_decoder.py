@@ -188,7 +188,7 @@ class MaskDecoder(nn.Module):
         hyper_in = torch.stack(hyper_in_list, dim=1)
 
         b, c, h, w = img_embedding.shape
-        masks = (hyper_in[:, :self.num_mask_tokens-1] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        masks = (hyper_in[:, :self.num_mask_tokens] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = self.bg_head(edge_embeddings)
 
         if self.use_alpha:
