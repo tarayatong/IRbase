@@ -295,12 +295,10 @@ def main(valid_datasets, args):
                     else:
                         print(f"No cached masks found for epoch {epoch - 1}, training without mask_inputs")
                     train_dataloaders, train_datasets = create_dataloaders(train_im_gt_list,
-                                                                           my_transforms=[
-                                                                               Resize(args.dataloader_size)
-                                                                           ],
                                                                            batch_size=args.batch_size_train,
                                                                            training=True,
-                                                                           mask_cache=None)
+                                                                           mask_cache=None, 
+                                                                           img_size=args.dataloader_size[0])
             
             # Training step
             train_metrics = train(net, train_dataloaders, optimizer, criterion)
@@ -311,12 +309,10 @@ def main(valid_datasets, args):
                 try:
                     # 创建一个单独的数据加载器用于生成mask（不使用cache，避免循环依赖）
                     mask_gen_dataloaders, _ = create_dataloaders(train_im_gt_list,
-                                                            my_transforms=[
-                                                                Resize(args.dataloader_size)
-                                                            ],
                                                             batch_size=args.batch_size_valid,  # 使用较小的batch size
                                                             training=True,  # 使用training=True来得到单个dataloader
-                                                            mask_cache=None)  # 不使用cache
+                                                            mask_cache=None, 
+                                                            img_size=args.dataloader_size[0])  # 不使用cache
                     
                     # 生成mask预测结果
                     image_paths, predicted_masks = generate_masks_for_dataset(net, mask_gen_dataloaders)

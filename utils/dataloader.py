@@ -96,7 +96,7 @@ def get_im_gt_name_list(datasets, flag='train'):
 
     return name_im_gt_list
 
-def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training=False, mask_cache=None):
+def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training=False, mask_cache=None, img_size=512):
     gos_dataloaders = []
     gos_datasets = []
 
@@ -110,6 +110,16 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
         num_workers_ = 4
     if batch_size > 8:
         num_workers_ = 8
+
+    if training:
+        my_transforms.append(RandomHFlip(prob=0.5))
+        my_transforms.append(RandomBrightnessContrast(brightness_range=0.2, contrast_range=0.2, prob=0.5))
+        if random.random() < 0.5:
+            crop_size = int(img_size * random.uniform(0.8, 1.))
+            my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=img_size))
+        if random.random() < 0.5:
+            my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2))
+    my_transforms.append(Resize(size=[img_size, img_size]))
 
     if training:
         for i in range(len(name_im_gt_list)):
@@ -156,6 +166,43 @@ class RandomHFlip(object):
         return result
 
 
+class RandomBrightnessContrast(object):
+    def __init__(self, brightness_range=0.2, contrast_range=0.2, prob=0.5):
+        """
+        随机调整图像的亮度和对比度
+        
+        Args:
+            brightness_range: 亮度变化范围，实际变化值在 [-brightness_range, brightness_range] 之间
+            contrast_range: 对比度变化范围，实际变化值在 [1-contrast_range, 1+contrast_range] 之间
+            prob: 应用变换的概率
+        """
+        self.brightness_range = brightness_range
+        self.contrast_range = contrast_range
+        self.prob = prob
+
+    def __call__(self, sample):
+        imidx, image, label, edge, shape = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
+        mask_inputs = sample.get('mask_inputs', torch.zeros(1, image.shape[1], image.shape[2]))
+        path = sample.get('path', None)
+
+        # 随机调整对比度
+        if random.random() <= self.prob:
+            contrast_factor = 1 + random.uniform(-self.contrast_range, self.contrast_range)
+            mean_value = image.mean()
+            image = mean_value + (image - mean_value) * contrast_factor
+            image = torch.clamp(image, 0, 255)
+            
+        # 随机调整亮度
+        if random.random() <= self.prob:
+            brightness_factor = random.uniform(-self.brightness_range, self.brightness_range) * 255.0
+            image = image + brightness_factor
+            image = torch.clamp(image, 0, 255)
+        result = {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': shape, 'mask_inputs': mask_inputs}
+        if path is not None:
+            result['path'] = path
+        return result
+
+
 class Resize(object):
     def __init__(self, size=[320, 320]):
         self.size = size
@@ -177,14 +224,15 @@ class Resize(object):
 
 
 class RandomCrop(object):
-    def __init__(self, size=[288, 288]):
-        self.size = size
+    def __init__(self, crop_size=[288, 288], out_size=512):
+        self.crop_size = crop_size
+        self.out_size = out_size
 
     def __call__(self, sample):
         imidx, image, label, edge, shape = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
 
         h, w = image.shape[1:]
-        new_h, new_w = self.size
+        new_h, new_w = self.crop_size
 
         top = np.random.randint(0, h - new_h)
         left = np.random.randint(0, w - new_w)
@@ -193,7 +241,11 @@ class RandomCrop(object):
         label = label[:, top:top + new_h, left:left + new_w]
         edge = edge[:, top:top + new_h, left:left + new_w]
 
-        return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.size)}
+        image = F.interpolate(image, self.out_size, mode='nearest')
+        label = F.interpolate(label, self.out_size, mode='nearest')
+        edge = F.interpolate(edge, self.out_size, mode='nearest')
+
+        return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.out_size)}
 
 
 class Normalize(object):
