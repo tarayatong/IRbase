@@ -119,6 +119,11 @@ class MaskDecoder(nn.Module):
             # nn.BatchNorm2d(1),
             nn.ReLU(),
         )
+        # self.alpha = nn.parameter(torch.ones(1,1,512,512))
+        self.beta_head = nn.Sequential(
+            nn.Conv2d(2, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
 
     def forward(
             self,
@@ -191,6 +196,7 @@ class MaskDecoder(nn.Module):
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
+
         upscaled_embedding = self.output_upscaling(src)
         # edge_embedding = upscalesd_embedding + edge_embeddings 
 
@@ -208,15 +214,15 @@ class MaskDecoder(nn.Module):
 
         b, c, h, w = img_embedding.shape
         masks = (hyper_in[:, :self.num_mask_tokens-1] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
-        bg = (hyper_in[:, self.num_mask_tokens-1:] @ (img_embedding+edge_embeddings).view(b, c, h * w)).view(b, -1, h, w)
+        bg = (hyper_in[:, self.num_mask_tokens-1:] @ (upscaled_embedding+edge_embeddings).view(b, c, h * w)).view(b, -1, h, w)
 
         if self.use_alpha:
-            # 卷积预测alpha
-            outputs = 2*masks-bg
+            beta = self.beta_head(torch.cat([masks, bg], dim=1))
+            outputs = (1+beta)*masks-beta*bg
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         else:
-            outputs = masks
-            return outputs, masks, bg, None
+            outputs = 2*masks-bg
+            return outputs, None, None, bg, None
         
 
 
