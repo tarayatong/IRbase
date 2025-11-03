@@ -113,9 +113,9 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
 
     if training:
         my_transforms.append(RandomHFlip(prob=0.5))
-        my_transforms.append(RandomBrightnessContrast(brightness_range=0.2, contrast_range=0.1, prob=0.5))
-        crop_size = int(img_size * random.uniform(0.8, 1.))
-        my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
+        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
+        # crop_size = int(img_size * random.uniform(0.8, 1.))
+        # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
         my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
     my_transforms.append(Resize(size=[img_size, img_size]))
 
@@ -210,10 +210,10 @@ class Resize(object):
         mask_inputs = sample.get('mask_inputs', torch.zeros(1, image.shape[1], image.shape[2]))
         path = sample.get('path', None)
 
-        image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), self.size, mode='bilinear'), dim=0)
-        label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), self.size, mode='bilinear'), dim=0)
-        edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), self.size, mode='bilinear'), dim=0)
-        mask_inputs = torch.squeeze(F.interpolate(torch.unsqueeze(mask_inputs, 0), self.size, mode='bilinear'), dim=0)
+        image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), self.size, mode='nearest'), dim=0)
+        label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), self.size, mode='nearest'), dim=0)
+        edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), self.size, mode='nearest'), dim=0)
+        mask_inputs = torch.squeeze(F.interpolate(torch.unsqueeze(mask_inputs, 0), self.size, mode='nearest'), dim=0)
 
         result = {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.size), 'mask_inputs': mask_inputs}
         if path is not None:
@@ -292,11 +292,11 @@ class LargeScaleJitter(object):
             scale = torch.minimum(scaled_size / image_size[0], scaled_size / image_size[1])
             scaled_size = (image_size * scale).round().long()
 
-            scaled_image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), scaled_size.tolist(), mode='bilinear'),
+            scaled_image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), scaled_size.tolist(), mode='nearest'),
                                          dim=0)
-            scaled_label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), scaled_size.tolist(), mode='bilinear'),
+            scaled_label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), scaled_size.tolist(), mode='nearest'),
                                          dim=0)
-            scaled_edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), scaled_size.tolist(), mode='bilinear'),
+            scaled_edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), scaled_size.tolist(), mode='nearest'),
                                          dim=0)
 
             # random crop
