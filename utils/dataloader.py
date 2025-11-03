@@ -113,12 +113,10 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
 
     if training:
         my_transforms.append(RandomHFlip(prob=0.5))
-        my_transforms.append(RandomBrightnessContrast(brightness_range=0.2, contrast_range=0.2, prob=0.5))
-        if random.random() < 0.5:
-            crop_size = int(img_size * random.uniform(0.8, 1.))
-            my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=img_size))
-        if random.random() < 0.5:
-            my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2))
+        my_transforms.append(RandomBrightnessContrast(brightness_range=0.2, contrast_range=0.1, prob=0.5))
+        crop_size = int(img_size * random.uniform(0.8, 1.))
+        my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
+        my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
     my_transforms.append(Resize(size=[img_size, img_size]))
 
     if training:
@@ -224,28 +222,33 @@ class Resize(object):
 
 
 class RandomCrop(object):
-    def __init__(self, crop_size=[288, 288], out_size=512):
+    def __init__(self, crop_size=[288, 288], out_size=(512, 512), prob=0.5):
         self.crop_size = crop_size
         self.out_size = out_size
+        self.prob = prob
 
     def __call__(self, sample):
         imidx, image, label, edge, shape = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
+        if random.random()<self.prob:
 
-        h, w = image.shape[1:]
-        new_h, new_w = self.crop_size
+            h, w = image.shape[1:]
+            new_h, new_w = self.crop_size
 
-        top = np.random.randint(0, h - new_h)
-        left = np.random.randint(0, w - new_w)
+            top = np.random.randint(0, h - new_h)
+            left = np.random.randint(0, w - new_w)
 
-        image = image[:, top:top + new_h, left:left + new_w]
-        label = label[:, top:top + new_h, left:left + new_w]
-        edge = edge[:, top:top + new_h, left:left + new_w]
+            image = image[:, top:top + new_h, left:left + new_w]
+            label = label[:, top:top + new_h, left:left + new_w]
+            edge = edge[:, top:top + new_h, left:left + new_w]
 
-        image = F.interpolate(image, self.out_size, mode='nearest')
-        label = F.interpolate(label, self.out_size, mode='nearest')
-        edge = F.interpolate(edge, self.out_size, mode='nearest')
+            image = F.interpolate(image.unsqueeze(0), self.out_size, mode='nearest').squeeze(0)
+            label = F.interpolate(label.unsqueeze(0), self.out_size, mode='nearest').squeeze(0)
+            edge = F.interpolate(edge.unsqueeze(0), self.out_size, mode='nearest').squeeze(0)
 
-        return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.out_size)}
+            return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(self.out_size)}
+        else:
+            return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': shape}
+
 
 
 class Normalize(object):
@@ -266,10 +269,11 @@ class LargeScaleJitter(object):
         https://github.com/gaopengcuhk/Pretrained-Pix2Seq/blob/7d908d499212bfabd33aeaa838778a6bfb7b84cc/datasets/transforms.py 
     """
 
-    def __init__(self, output_size=512, aug_scale_min=0.8, aug_scale_max=1.5):
+    def __init__(self, output_size=512, aug_scale_min=0.8, aug_scale_max=1.5, prob=0.5):
         self.desired_size = torch.tensor(output_size)
         self.aug_scale_min = aug_scale_min
         self.aug_scale_max = aug_scale_max
+        self.prob = prob
 
     def pad_target(self, padding, target):
         target = target.copy()
@@ -279,45 +283,46 @@ class LargeScaleJitter(object):
 
     def __call__(self, sample):
         imidx, image, label, edge, image_size = sample['imidx'], sample['image'], sample['label'], sample['edge'], sample['shape']
-
         # resize keep ratio
-        out_desired_size = (self.desired_size * image_size / max(image_size)).round().int()
+        # out_desired_size = (self.desired_size * image_size / max(image_size)).round().int()
+        if random.random() < self.prob:
+            random_scale = torch.rand(1) * (self.aug_scale_max - self.aug_scale_min) + self.aug_scale_min
+            scaled_size = (random_scale * self.desired_size).round()
 
-        random_scale = torch.rand(1) * (self.aug_scale_max - self.aug_scale_min) + self.aug_scale_min
-        scaled_size = (random_scale * self.desired_size).round()
+            scale = torch.minimum(scaled_size / image_size[0], scaled_size / image_size[1])
+            scaled_size = (image_size * scale).round().long()
 
-        scale = torch.minimum(scaled_size / image_size[0], scaled_size / image_size[1])
-        scaled_size = (image_size * scale).round().long()
+            scaled_image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), scaled_size.tolist(), mode='bilinear'),
+                                         dim=0)
+            scaled_label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), scaled_size.tolist(), mode='bilinear'),
+                                         dim=0)
+            scaled_edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), scaled_size.tolist(), mode='bilinear'),
+                                         dim=0)
 
-        scaled_image = torch.squeeze(F.interpolate(torch.unsqueeze(image, 0), scaled_size.tolist(), mode='bilinear'),
-                                     dim=0)
-        scaled_label = torch.squeeze(F.interpolate(torch.unsqueeze(label, 0), scaled_size.tolist(), mode='bilinear'),
-                                     dim=0)
-        scaled_edge = torch.squeeze(F.interpolate(torch.unsqueeze(edge, 0), scaled_size.tolist(), mode='bilinear'),
-                                     dim=0)
+            # random crop
+            crop_size = (min(self.desired_size, scaled_size[0]), min(self.desired_size, scaled_size[1]))
 
-        # random crop
-        crop_size = (min(self.desired_size, scaled_size[0]), min(self.desired_size, scaled_size[1]))
+            margin_h = max(scaled_size[0] - crop_size[0], 0).item()
+            margin_w = max(scaled_size[1] - crop_size[1], 0).item()
+            offset_h = np.random.randint(0, margin_h + 1)
+            offset_w = np.random.randint(0, margin_w + 1)
+            crop_y1, crop_y2 = offset_h, offset_h + crop_size[0].item()
+            crop_x1, crop_x2 = offset_w, offset_w + crop_size[1].item()
 
-        margin_h = max(scaled_size[0] - crop_size[0], 0).item()
-        margin_w = max(scaled_size[1] - crop_size[1], 0).item()
-        offset_h = np.random.randint(0, margin_h + 1)
-        offset_w = np.random.randint(0, margin_w + 1)
-        crop_y1, crop_y2 = offset_h, offset_h + crop_size[0].item()
-        crop_x1, crop_x2 = offset_w, offset_w + crop_size[1].item()
+            scaled_image = scaled_image[:, crop_y1:crop_y2, crop_x1:crop_x2]
+            scaled_label = scaled_label[:, crop_y1:crop_y2, crop_x1:crop_x2]
+            scaled_edge = scaled_edge[:, crop_y1:crop_y2, crop_x1:crop_x2]
 
-        scaled_image = scaled_image[:, crop_y1:crop_y2, crop_x1:crop_x2]
-        scaled_label = scaled_label[:, crop_y1:crop_y2, crop_x1:crop_x2]
-        scaled_edge = scaled_edge[:, crop_y1:crop_y2, crop_x1:crop_x2]
+            # pad
+            padding_h = max(self.desired_size - scaled_image.size(1), 0).item()
+            padding_w = max(self.desired_size - scaled_image.size(2), 0).item()
+            image = F.pad(scaled_image, [0, padding_w, 0, padding_h], value=image.mean())
+            label = F.pad(scaled_label, [0, padding_w, 0, padding_h], value=0)
+            edge = F.pad(scaled_edge, [0, padding_w, 0, padding_h], value=0)
 
-        # pad
-        padding_h = max(self.desired_size - scaled_image.size(1), 0).item()
-        padding_w = max(self.desired_size - scaled_image.size(2), 0).item()
-        image = F.pad(scaled_image, [0, padding_w, 0, padding_h], value=128)
-        label = F.pad(scaled_label, [0, padding_w, 0, padding_h], value=0)
-        edge = F.pad(scaled_edge, [0, padding_w, 0, padding_h], value=0)
-
-        return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(image.shape[-2:])}
+            return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': torch.tensor(image.shape[-2:])}
+        else:
+            return {'imidx': imidx, 'image': image, 'label': label, 'edge': edge, 'shape': image_size}
 
 
 class OnlineDataset(Dataset):
