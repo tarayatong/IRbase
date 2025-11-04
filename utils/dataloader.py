@@ -110,7 +110,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
         num_workers_ = 4
     if batch_size > 8:
         num_workers_ = 8
-
+    my_transforms = []
     if training:
         my_transforms.append(RandomHFlip(prob=0.5))
         my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
@@ -125,7 +125,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
             gos_datasets.append(gos_dataset)
 
         gos_dataset = ConcatDataset(gos_datasets)
-        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True)
+        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers_)
 
         gos_dataloaders = dataloader
         gos_datasets = gos_dataset
@@ -134,7 +134,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
         for i in range(len(name_im_gt_list)):
             gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms),
                                         eval_ori_resolution=True, mask_cache=mask_cache)
-            dataloader = DataLoader(gos_dataset, batch_size=batch_size)
+            dataloader = DataLoader(gos_dataset, batch_size=batch_size, num_workers=num_workers_)
 
             gos_dataloaders.append(dataloader)
             gos_datasets.append(gos_dataset)
