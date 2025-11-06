@@ -26,6 +26,7 @@ class MaskDecoder(nn.Module):
             iou_head_hidden_dim: int = 256,
             mask_cache: bool = False,  # 新增参数
             use_alpha: bool = False,  # 是否使用余弦相似度alpha融合输出
+            use_beta
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -50,6 +51,7 @@ class MaskDecoder(nn.Module):
         self.transformer = transformer
         self.mask_cache = mask_cache  # 新增属性
         self.use_alpha = use_alpha
+        self.use_beta = use_beta
         self.num_mask_tokens = num_multimask_outputs+1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
@@ -175,10 +177,12 @@ class MaskDecoder(nn.Module):
 
         upscaled_embedding = self.output_upscaling(src)
         # edge_embedding = upscalesd_embedding + edge_embeddings 
-
-        alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
-        alpha = self.alpha_head(alpha_in)
-        img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+        if self.use_alpha:
+            alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
+            alpha = self.alpha_head(alpha_in)
+            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+        else:
+            img_embedding = upscaled_embedding
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -191,12 +195,12 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = self.bg_head(edge_embeddings)
 
-        if self.use_alpha:
+        if self.use_beta:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             outputs = (1+beta)*masks-beta*bg
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         else:
-            outputs = 2*masks-bg
+            outputs = masks
             return outputs, None, None, bg, None
         
 

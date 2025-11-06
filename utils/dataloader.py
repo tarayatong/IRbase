@@ -379,11 +379,17 @@ class OnlineDataset(Dataset):
             im = np.repeat(im, 3, axis=2)
 
         # edge = cv2.Canny(gt, 100, 200)
-        edge = cv2.Canny(im, 20, 80)
-        blurred = cv2.GaussianBlur(edge, (1, 1), 0)
+
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))  # 半径 5 -> 直径 11
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
-        edge = (blurred > 0).astype(np.float32) * (1 - gt_dilated / 255.)
+        imgt = im*(gt>0)[:,:,None]
+        edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
+        blurred = cv2.GaussianBlur(edge, (1, 1), 0)
+        edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
+
+        # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+        # tophat = cv2.morphologyEx(im, cv2.MORPH_TOPHAT, kernel)
+        # edge = (tophat[:,:,0] > min(imgt[imgt>0].mean()-im.mean(), 50)).astype(np.float32) * (1 - gt_dilated / 255.)
         im = torch.tensor(im.copy(), dtype=torch.float32)
         im = torch.transpose(torch.transpose(im, 1, 2), 0, 1)
         gt = torch.unsqueeze(torch.tensor(gt, dtype=torch.float32), 0)

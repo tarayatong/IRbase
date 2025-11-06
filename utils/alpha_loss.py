@@ -7,8 +7,8 @@ import torch
 import torch.nn.functional as F
 
 def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
-    # masks = masks.detach()
-    # bgs = bgs.detach()
+    masks = masks.detach()
+    bgs = bgs.detach()
     # masks: [B, C, H, W]，对每个(b,h,w)位置的C维向量单独归一化
     p_min = masks.min(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最小值
     p_max = masks.max(dim=1, keepdim=True)[0]  # [B, 1, H, W] - 每个像素的最大值

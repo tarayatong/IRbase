@@ -496,15 +496,17 @@ def train(net, train_dataloaders, optimizer, criterion):
 
             # 使用Alpha损失函数
             loss = iou_loss + 10*bce_loss + 10*edge_loss + alpha_loss
-        else:
+        elif net.mask_decoder.use_beta:
             outputs, _, _, bgs, _ = net(batched_input)
-            
-            # 原始损失计算
             iou_loss, _ = criterion(outputs, labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
             loss = iou_loss + 10*bce_loss + 10*edge_loss
-        
+        else:
+            outputs, _, _, _, _ = net(batched_input)
+            iou_loss, _ = criterion(outputs, labels_ori/255.)
+            bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
+            loss = iou_loss + 10*bce_loss
         loss.backward()
         optimizer.step()
 
