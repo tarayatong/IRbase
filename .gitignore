@@ -3,7 +3,7 @@ datasets/
 workdirs/
 workdir/
 *.png
-
+vis*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
