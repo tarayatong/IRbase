@@ -43,7 +43,7 @@ def build_sam_IRSAM(checkpoint=None, use_mask_cache=False):
                 ),
                 transformer_dim=prompt_embed_dim,
                 mask_cache=use_mask_cache,
-                use_alpha=False,
+                use_alpha=True,
                 use_beta=True,
             ),
             pixel_mean=[123.675, 116.28, 103.53],

@@ -62,16 +62,20 @@ def get_im_gt_name_list(datasets, flag='train'):
 
         # Read the filenames from the corresponding txt file
         if flag == 'train':
-            list_txt = 'datasets/IRSTD-1k/trainval.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
-            list_txt = 'datasets/IRSTD-1k/test.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")
         
         # Read the txt file containing filenames
         with open(list_txt, 'r') as f:
             filenames = f.readlines()
 
         # Construct the image paths from the filenames
-        tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in filenames]
+        if "IRSTD" in datasets[i]["name"]:
+            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
+                           filenames]
+        else:
+            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
         print('-im-', datasets[i]["name"], datasets[i]["im_dir"], ': ', len(tmp_im_list))
 
         # Check if ground truth directory exists and construct the gt paths
@@ -384,7 +388,7 @@ class OnlineDataset(Dataset):
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         imgt = im*(gt>0)[:,:,None]
         edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
-        blurred = cv2.GaussianBlur(edge, (1, 1), 0)
+        blurred = cv2.GaussianBlur(edge, (3, 3), 0)
         edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
 
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))

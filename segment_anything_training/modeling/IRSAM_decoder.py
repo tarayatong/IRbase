@@ -198,6 +198,7 @@ class MaskDecoder(nn.Module):
         if self.use_beta:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             outputs = (1+beta)*masks-beta*bg
+
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         else:
             outputs = masks

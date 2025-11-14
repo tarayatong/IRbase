@@ -52,7 +52,7 @@ def get_args_parser():
                         help="The path to the SAM checkpoint trained with no prompt")
     parser.add_argument("--device", type=str, default="cuda",
                         help="The device to run generation on.")
-
+    parser.add_argument('--epoch', default=200, type=int)
     parser.add_argument('--learning_rate', default=1e-4, type=float)
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--lr_drop_epoch', default=50, type=int)
@@ -247,7 +247,7 @@ def main(valid_datasets, args):
                 net.load_state_dict(torch.load(args.restore_model, map_location="cpu"))
         best_iou = 0
         # Loop for training and evaluating for 20 epochs
-        for epoch in range(1, 201):  # 20 epochs
+        for epoch in range(1, args.epoch+1):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
             if epoch == 1:
                 # 第一轮训练：使用初始cache（如果可用且启用）
@@ -544,24 +544,27 @@ def train(net, train_dataloaders, optimizer, criterion):
 if __name__ == "__main__":
     # --------------- Configuring the Valid datasets ---------------
     dataset_val_nuaa = {"name": "Sirstv2_512",
-                        "im_dir": "datasets/Sirstv2_512/test_images",
-                        "gt_dir": "datasets/Sirstv2_512/test_masks",
+                        "im_dir": "datasets/NUAA-SIRST/images",
+                        "gt_dir": "datasets/NUAA-SIRST/masks",
                         "im_ext": ".png",
-                        "gt_ext": ".png"}
+                        "gt_ext": ".png",
+                        "txt_dir": "datasets/NUAA-SIRST/50_50"}
 
     dataset_val_NUDT = {"name": "NUDT",
-                        "im_dir": "datasets/NUDT-SIRST00/test_images",
-                        "gt_dir": "datasets/NUDT-SIRST00/test_masks",
+                        "im_dir": "datasets/NUDT-SIRST/images",
+                        "gt_dir": "datasets/NUDT-SIRST/masks",
                         "im_ext": ".png",
-                        "gt_ext": ".png"}
+                        "gt_ext": ".png",
+                        "txt_dir": 'datasets/NUDT-SIRST/80_20'}
 
     dataset_val_IRSTD = {"name": "IRSTD",
                          "im_dir": "datasets/IRSTD-1k/images",
                          "gt_dir": "datasets/IRSTD-1k/masks",
                          "im_ext": ".png",
-                         "gt_ext": ".png"}
+                         "gt_ext": ".png",
+                         'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_IRSTD]
+    valid_datasets = [dataset_val_NUDT]
 
     args = get_args_parser()
 
