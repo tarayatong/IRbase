@@ -543,12 +543,12 @@ def train(net, train_dataloaders, optimizer, criterion):
 
 if __name__ == "__main__":
     # --------------- Configuring the Valid datasets ---------------
-    dataset_val_nuaa = {"name": "Sirstv2_512",
+    dataset_val_nuaa = {"name": "Sirstv2",
                         "im_dir": "datasets/NUAA-SIRST/images",
                         "gt_dir": "datasets/NUAA-SIRST/masks",
                         "im_ext": ".png",
                         "gt_ext": ".png",
-                        "txt_dir": "datasets/NUAA-SIRST/50_50"}
+                        "txt_dir": "datasets/NUAA-SIRST/idx_427"}
 
     dataset_val_NUDT = {"name": "NUDT",
                         "im_dir": "datasets/NUDT-SIRST/images",
@@ -564,7 +564,7 @@ if __name__ == "__main__":
                          "gt_ext": ".png",
                          'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_NUDT]
+    valid_datasets = [dataset_val_nuaa]
 
     args = get_args_parser()
 

@@ -71,11 +71,11 @@ def get_im_gt_name_list(datasets, flag='train'):
             filenames = f.readlines()
 
         # Construct the image paths from the filenames
-        if "IRSTD" in datasets[i]["name"]:
+        if "NUDT" in datasets[i]["name"]:
+            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
+        else:
             tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
                            filenames]
-        else:
-            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
         print('-im-', datasets[i]["name"], datasets[i]["im_dir"], ': ', len(tmp_im_list))
 
         # Check if ground truth directory exists and construct the gt paths
@@ -83,10 +83,17 @@ def get_im_gt_name_list(datasets, flag='train'):
             print('-gt-', datasets[i]["name"], datasets[i]["gt_dir"], ': ', 'No Ground Truth Found')
             tmp_gt_list = []
         else:
-            tmp_gt_list = [
-                datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[0] + datasets[i]["gt_ext"]
-                for filename in filenames
-            ]
+            if "v2" in datasets[i]["name"]:
+                tmp_gt_list = [
+                    datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[
+                        0] + '_pixels0' + datasets[i]["gt_ext"]
+                    for filename in filenames
+                ]
+            else:
+                tmp_gt_list = [
+                    datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[0] + datasets[i]["gt_ext"]
+                    for filename in filenames
+                ]
             print('-gt-', datasets[i]["name"], datasets[i]["gt_dir"], ': ', len(tmp_gt_list))
 
         # Store image and ground truth paths in the list
@@ -129,7 +136,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
             gos_datasets.append(gos_dataset)
 
         gos_dataset = ConcatDataset(gos_datasets)
-        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers_)
+        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
         gos_dataloaders = dataloader
         gos_datasets = gos_dataset
@@ -138,7 +145,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
         for i in range(len(name_im_gt_list)):
             gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms),
                                         eval_ori_resolution=True, mask_cache=mask_cache)
-            dataloader = DataLoader(gos_dataset, batch_size=batch_size, num_workers=num_workers_)
+            dataloader = DataLoader(gos_dataset, batch_size=batch_size, num_workers=0)
 
             gos_dataloaders.append(dataloader)
             gos_datasets.append(gos_dataset)
