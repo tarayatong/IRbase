@@ -384,7 +384,7 @@ class OnlineDataset(Dataset):
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         imgt = im*(gt>0)[:,:,None]
         edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
-        blurred = cv2.GaussianBlur(edge, (1, 1), 0)
+        blurred = cv2.GaussianBlur(edge, (3, 3), 0)
         edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
 
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))

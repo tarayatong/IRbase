@@ -180,7 +180,7 @@ class MaskDecoder(nn.Module):
         if self.use_alpha:
             alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
             alpha = self.alpha_head(alpha_in)
-            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+            img_embedding = upscaled_embedding - alpha*edge_embeddings
         else:
             img_embedding = upscaled_embedding
 
@@ -195,10 +195,17 @@ class MaskDecoder(nn.Module):
         masks = (hyper_in[:, :self.num_mask_tokens] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
         bg = self.bg_head(edge_embeddings)
 
-        if self.use_beta:
+        if self.use_beta and self.use_alpha:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
-            outputs = (1+beta)*masks-beta*bg
+            outputs = masks-beta*bg
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
+        elif self.use_alpha:
+            outputs = masks
+            return outputs, upscaled_embedding, edge_embeddings, bg, alpha
+        elif self.use_beta:
+            beta = self.beta_head(torch.cat([masks, bg], dim=1))
+            outputs = masks-beta*bg
+            return outputs, None, None, bg, None
         else:
             outputs = masks
             return outputs, None, None, bg, None
