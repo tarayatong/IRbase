@@ -11,7 +11,7 @@ from copy import deepcopy
 from skimage import io
 import os
 from glob import glob
-
+from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision import transforms, utils
@@ -64,7 +64,7 @@ def get_im_gt_name_list(datasets, flag='train'):
         if flag == 'train':
             list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
-            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")
+            list_txt = os.path.join(datasets[i]["txt_dir"], "test.txt")
         
         # Read the txt file containing filenames
         with open(list_txt, 'r') as f:
@@ -379,8 +379,12 @@ class OnlineDataset(Dataset):
     def __getitem__(self, idx):
         im_path = self.dataset["im_path"][idx]
         gt_path = self.dataset["gt_path"][idx]
-        im = io.imread(im_path)
-        gt = io.imread(gt_path)
+        im = Image.open(im_path).convert('RGB')
+        im = np.array(im)
+        gt = Image.open(gt_path)
+        gt = np.array(gt)
+        # im = io.imread(im_path)
+        # gt = io.imread(gt_path)
 
         if len(gt.shape) > 2:
             gt = gt[:, :, 0]
@@ -388,6 +392,8 @@ class OnlineDataset(Dataset):
             im = im[:, :, np.newaxis]
         if im.shape[2] == 1:
             im = np.repeat(im, 3, axis=2)
+        if im.shape[2] == 4:
+            im = im[:, :, :3]
 
         # edge = cv2.Canny(gt, 100, 200)
 
