@@ -57,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--lr_drop_epoch', default=50, type=int)
     parser.add_argument('--max_epoch_num', default=1001, type=int)
-    parser.add_argument('--dataloader_size', default=[512, 512], type=list)
+    parser.add_argument('--dataloader_size', default=[256, 256], type=list)
     parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
@@ -170,7 +170,7 @@ def main(valid_datasets, args):
     print(len(valid_dataloaders), " valid dataloaders created")
 
     # --- Step 3: Load pretrained Network---
-    net = build_sam_IRSAM(checkpoint=args.checkpoint, use_mask_cache=args.use_mask_cache)  # 传递use_mask_cache参数
+    net = build_sam_IRSAM(checkpoint=args.checkpoint, use_mask_cache=args.use_mask_cache, img_size=args.dataloader_size[0])  # 传递use_mask_cache参数
     if torch.cuda.is_available():
         net.cuda()
 
@@ -408,8 +408,8 @@ def evaluate(net, valid_dataloaders):
             _, IoU = IoU_metric.get()
             _, nIoU = nIoU_metric.get()
 
-            tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
-                                 % (IoU, nIoU, PD[0], FA[0]))
+            tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.11lf'
+                                 % (IoU, nIoU, PD[0], FA[0]*1E6))
 
         metric['iou'] = IoU
         metric['niou'] = nIoU
@@ -564,7 +564,7 @@ if __name__ == "__main__":
                          "gt_ext": ".png",
                          'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_nuaa]
+    valid_datasets = [dataset_val_NUDT]
 
     args = get_args_parser()
 
