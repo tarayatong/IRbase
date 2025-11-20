@@ -3,6 +3,8 @@ datasets/
 workdirs/
 workdir/
 *.png
+vis*
+*.tar.gz
 
 
 # Byte-compiled / optimized / DLL files
