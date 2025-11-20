@@ -64,6 +64,8 @@ class MaskDecoder(nn.Module):
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
+            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            # activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
@@ -84,7 +86,10 @@ class MaskDecoder(nn.Module):
             LayerNorm2d(transformer_dim),
             nn.GELU(),
             DySample(transformer_dim, scale=2),
-            nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1)
+            nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1),
+            LayerNorm2d(transformer_dim//8),
+            nn.GELU(),
+            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
         )
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.embedding_encoder = nn.Sequential(
@@ -106,10 +111,10 @@ class MaskDecoder(nn.Module):
         # 用卷积直接预测alpha，输入为 [masks, bg] 按通道拼接
         # 拼接后通道数为 (num_mask_channels + 1) = self.num_mask_tokens
         self.alpha_head = nn.Sequential(
-            nn.Conv2d(transformer_dim//4, 4, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(4),
+            nn.Conv2d(transformer_dim//4, transformer_dim//8, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(transformer_dim//8),
             nn.GELU(),
-            nn.Conv2d(4, 1, kernel_size=1, bias=False),
+            nn.Conv2d(transformer_dim//8, transformer_dim//8, kernel_size=1, bias=False),
             # nn.BatchNorm2d(1),
             nn.ReLU(),
         )
@@ -180,7 +185,7 @@ class MaskDecoder(nn.Module):
         if self.use_alpha:
             alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
             alpha = self.alpha_head(alpha_in)
-            img_embedding = upscaled_embedding - alpha*edge_embeddings
+            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
         else:
             img_embedding = upscaled_embedding
 
@@ -197,7 +202,7 @@ class MaskDecoder(nn.Module):
 
         if self.use_beta and self.use_alpha:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
-            outputs = masks-beta*bg
+            outputs = (1+beta)*masks-beta*bg
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         elif self.use_alpha:
             outputs = masks
