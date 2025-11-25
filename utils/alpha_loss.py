@@ -29,15 +29,20 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori):
     # y_minus_q_norm = torch.clamp(y_minus_q_norm, min=epsilon)
     # # 计算目标值: (y-p)dot(y-q)/||(y-q)||
     # target = dot_product / y_minus_q_norm  # [B, 1, H, W]
-    
-    target1 = (y*(p-q)).sum(dim=1, keepdim=True)
-    # p_norm = (p * p).sum(dim=1, keepdim=True)
-    # q_norm = (q * q).sum(dim=1, keepdim=True)
-    # p_dot_q = (p*q).sum(dim=1, keepdim=True)
-    # target2 = (1+alpha)*p_norm+alpha*q_norm-(1+2*alpha)*p_dot_q
-    target2 = (((1+alpha)*p-alpha*q)*(p-q)).sum(dim=1, keepdim=True)
-    # 计算alpha与目标值的L2损失
-    alpha_loss_val = F.mse_loss(target1, target2)
-    
+
+    # orthogonality condition
+    # target1 = (y*(p-q)).sum(dim=1, keepdim=True)
+    # target2 = (((1+alpha)*p-alpha*q)*(p-q)).sum(dim=1, keepdim=True)
+    # alpha_loss_val = F.mse_loss(target1, target2)
+
+    # absolute distance
+    # p_ = (1 + alpha) * p - alpha * q
+    # alpha_loss_val = F.mse_loss(y, p_)
+
+    # cos distance
+    p_ = (1 + alpha) * p - alpha * q
+    cos_sim = F.cosine_similarity(p_, y, dim=1)
+    alpha_loss_val = (1-cos_sim).mean()
+
     return alpha_loss_val
 
