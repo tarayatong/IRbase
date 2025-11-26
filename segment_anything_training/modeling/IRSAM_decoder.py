@@ -118,6 +118,14 @@ class MaskDecoder(nn.Module):
             # nn.BatchNorm2d(1),
             nn.ReLU(),
         )
+        self.gamma_head = nn.Sequential(
+            nn.Conv2d(transformer_dim//4, transformer_dim//8, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(transformer_dim//8),
+            nn.GELU(),
+            nn.Conv2d(transformer_dim//8, transformer_dim//8, kernel_size=1, bias=False),
+            # nn.BatchNorm2d(1),
+            nn.ReLU(),
+        )
         # self.alpha = nn.parameter(torch.ones(1,1,512,512))
         self.beta_head = nn.Sequential(
             nn.Conv2d(2, 1, kernel_size=1),
@@ -185,7 +193,8 @@ class MaskDecoder(nn.Module):
         if self.use_alpha:
             alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
             alpha = self.alpha_head(alpha_in)
-            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+            gamma = self.gamma_head(alpha_in)
+            img_embedding = gamma*upscaled_embedding - alpha*edge_embeddings
         else:
             img_embedding = upscaled_embedding
 
@@ -206,7 +215,7 @@ class MaskDecoder(nn.Module):
             return outputs, upscaled_embedding, edge_embeddings, bg, alpha
         elif self.use_alpha:
             outputs = masks
-            return outputs, upscaled_embedding, edge_embeddings, bg, alpha
+            return outputs, upscaled_embedding, edge_embeddings, bg, img_embedding
         elif self.use_beta:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             outputs = masks-beta*bg
