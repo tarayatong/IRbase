@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--learning_rate', default=1e-4, type=float)
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--lr_drop_epoch', default=50, type=int)
-    parser.add_argument('--max_epoch_num', default=1001, type=int)
+    parser.add_argument('--epoch_num', default=201, type=int)
     parser.add_argument('--dataloader_size', default=[512, 512], type=list)
     parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
@@ -247,7 +247,7 @@ def main(valid_datasets, args):
                 net.load_state_dict(torch.load(args.restore_model, map_location="cpu"))
         best_iou = 0
         # Loop for training and evaluating for 20 epochs
-        for epoch in range(1, 201):  # 20 epochs
+        for epoch in range(1, args.epoch_num):  # 20 epochs
             print(f"--- Epoch {epoch} ---")
             if epoch == 1:
                 # 第一轮训练：使用初始cache（如果可用且启用）
@@ -409,12 +409,12 @@ def evaluate(net, valid_dataloaders):
             _, nIoU = nIoU_metric.get()
 
             tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
-                                 % (IoU, nIoU, PD[0], FA[0]))
+                                 % (IoU, nIoU, PD[0], FA[0]*1e6))
 
         metric['iou'] = IoU
         metric['niou'] = nIoU
         metric['pd'] = PD[0]
-        metric['fa'] = FA[0]
+        metric['fa'] = FA[0]*1e6
     return metric
 
 
@@ -495,7 +495,7 @@ def train(net, train_dataloaders, optimizer, criterion):
             alpha_loss= AlphaLoss(img_embed, edge_embed, alpha, edges, labels_ori)
 
             # 使用Alpha损失函数
-            loss = iou_loss + 10*bce_loss + 10*edge_loss + alpha_loss
+            loss = iou_loss + 10*bce_loss + 5*edge_loss  + 0.5*alpha_loss
         elif net.mask_decoder.use_beta:
             outputs, _, _, bgs, _ = net(batched_input)
             iou_loss, _ = criterion(outputs, labels_ori/255.)

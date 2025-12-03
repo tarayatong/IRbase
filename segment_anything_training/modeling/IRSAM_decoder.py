@@ -64,7 +64,7 @@ class MaskDecoder(nn.Module):
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
-            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
             # activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -87,9 +87,9 @@ class MaskDecoder(nn.Module):
             nn.GELU(),
             DySample(transformer_dim, scale=2),
             nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1),
-            LayerNorm2d(transformer_dim//8),
-            nn.GELU(),
-            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            # LayerNorm2d(transformer_dim//8),
+            # nn.GELU(),
+            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
         )
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.embedding_encoder = nn.Sequential(
@@ -193,8 +193,8 @@ class MaskDecoder(nn.Module):
         if self.use_alpha:
             alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
             alpha = self.alpha_head(alpha_in)
-            gamma = self.gamma_head(alpha_in)
-            img_embedding = gamma*upscaled_embedding - alpha*edge_embeddings
+            # gamma = self.gamma_head(alpha_in)
+            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
         else:
             img_embedding = upscaled_embedding
 
@@ -212,7 +212,7 @@ class MaskDecoder(nn.Module):
         if self.use_beta and self.use_alpha:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             outputs = masks-beta*bg
-            return outputs, upscaled_embedding, edge_embeddings, bg, alpha
+            return outputs, upscaled_embedding, edge_embeddings, bg, img_embedding
         elif self.use_alpha:
             outputs = masks
             return outputs, upscaled_embedding, edge_embeddings, bg, img_embedding
