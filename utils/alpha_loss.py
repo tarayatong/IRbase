@@ -6,7 +6,7 @@ Alpha损失函数模块
 import torch
 import torch.nn.functional as F
 
-def AlphaLoss(masks, bgs, alpha, edges, labels_ori, mode='cos'):
+def AlphaLoss(masks, bgs, alpha, edges, labels_ori, mode='geo'):
     masks = masks.detach()
     bgs = bgs.detach()
     y = labels_ori.repeat(1, 32, 1, 1) / 255.  # [B, 32, H, W] 与p维度匹配
@@ -28,10 +28,10 @@ def AlphaLoss(masks, bgs, alpha, edges, labels_ori, mode='cos'):
         p_ = (alpha - p__min) / (p__max - p__min + 1e-8)
         if mode == 'geo':
             # orthogonality condition
-            target1 = (y * (p - q)).sum(dim=1, keepdim=True)
+            target1 = ((y-p_) * (p-q)).sum(dim=1, keepdim=True)
             # target2 = (((1+alpha)*p-alpha*q)*(p-q)).sum(dim=1, keepdim=True)
-            target2 = ((p_) * (p - q)).sum(dim=1, keepdim=True)
-            alpha_loss_val = F.mse_loss(target1, target2)
+            # target2 = ((p_) * (p-q)).sum(dim=1, keepdim=True)
+            alpha_loss_val = F.mse_loss(target1, torch.zeros(target1.shape).cuda())
         else:
             # absolute distance
             # p_ = (1 + alpha) * p - alpha * q

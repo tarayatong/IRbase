@@ -380,12 +380,12 @@ class OnlineDataset(Dataset):
 
         # edge = cv2.Canny(gt, 100, 200)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))  # 半径 5 -> 直径 11
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))  # 半径 5 -> 直径 11
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         imgt = im*(gt>0)[:,:,None]
         edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
-        blurred = cv2.GaussianBlur(edge, (3, 3), 0)
-        edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
+        blurred = cv2.GaussianBlur(edge, (5, 5), 0)
+        edge = (blurred).astype(np.float32) * (1 - gt_dilated / 255.)
 
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
         # tophat = cv2.morphologyEx(im, cv2.MORPH_TOPHAT, kernel)
