@@ -36,7 +36,7 @@ from utils.mask_cache import MaskCache, generate_masks_for_dataset
 from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 
 def get_args_parser():
@@ -395,14 +395,14 @@ def evaluate(net, valid_dataloaders):
 
                 batched_input.append(dict_input)
 
-            outputs, _, _, _, _ = net(batched_input)
+            out_dict = net(batched_input)
 
             torch.cuda.synchronize()
 
             # 使用outputs作为最终预测结果进行评估
-            IoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
-            nIoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
-            Pd_Fa.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
+            IoU_metric.update(out_dict["out_maps"].cpu(), (labels_ori / 255.).cpu().detach())
+            nIoU_metric.update(out_dict["out_maps"].cpu(), (labels_ori / 255.).cpu().detach())
+            Pd_Fa.update(out_dict["out_maps"].cpu(), (labels_ori / 255.).cpu().detach())
 
             FA, PD = Pd_Fa.get(len(valid_dataloader))
             _, IoU = IoU_metric.get()
@@ -487,25 +487,24 @@ def train(net, train_dataloaders, optimizer, criterion):
         
         # 检查是否使用alpha融合
         if hasattr(net.mask_decoder, 'use_alpha') and net.mask_decoder.use_alpha:
-            outputs, img_embed, edge_embed, bgs, alpha = net(batched_input)
-
-            iou_loss, _ = criterion(outputs, labels_ori/255.)
-            bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
-            edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
-            alpha_loss= AlphaLoss(img_embed, edge_embed, alpha, edges, labels_ori)
+            out_dict = net(batched_input)
+            iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
+            bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
+            alpha_loss= AlphaLoss(out_dict, edges, labels_ori)
 
             # 使用Alpha损失函数
             loss = iou_loss + 10*bce_loss + 10*edge_loss  + 0.5*alpha_loss
         elif net.mask_decoder.use_beta:
-            outputs, _, _, bgs, _ = net(batched_input)
-            iou_loss, _ = criterion(outputs, labels_ori/255.)
-            bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
-            edge_loss = F.binary_cross_entropy(torch.sigmoid(bgs), edges/255.)
+            out_dict = net(batched_input)
+            iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
+            bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges/255.)
             loss = iou_loss + 10*bce_loss + 10*edge_loss
         else:
-            outputs, _, _, _, _ = net(batched_input)
-            iou_loss, _ = criterion(outputs, labels_ori/255.)
-            bce_loss = F.binary_cross_entropy(torch.sigmoid(outputs), labels_ori/255.)
+            out_dict = net(batched_input)
+            iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
+            bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
             loss = iou_loss + 10*bce_loss
         loss.backward()
         optimizer.step()
@@ -513,8 +512,8 @@ def train(net, train_dataloaders, optimizer, criterion):
         epoch_loss += loss.item()
 
         # Update metrics
-        IoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
-        nIoU_metric.update(outputs.cpu(), (labels_ori / 255.).cpu().detach())
+        IoU_metric.update(out_dict["out_maps"].cpu(), (labels_ori / 255.).cpu().detach())
+        nIoU_metric.update(out_dict["out_maps"].cpu(), (labels_ori / 255.).cpu().detach())
         # Pd_Fa.update(masks.cpu(), (labels_ori / 255.).cpu().detach())
 
         # FA, PD = Pd_Fa.get(len(train_dataloaders))

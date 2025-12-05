@@ -147,7 +147,7 @@ class MaskDecoder(nn.Module):
         edge_features = self.compress_vit_feat(edge_features)  # qian
         # edge_features = self.embedding_encoder(image_embeddings)  # shen
 
-        outputs, img_embed, edge_embed, bg, alpha = self.predict_masks(
+        return_dict = self.predict_masks(
             image_embeddings=image_embeddings,
             edge_embeddings=edge_features,
             image_pe=image_pe,
@@ -155,7 +155,7 @@ class MaskDecoder(nn.Module):
             dense_prompt_embeddings=dense_prompt_embeddings,
         )
 
-        return outputs, img_embed, edge_embed, bg, alpha
+        return return_dict
 
     def predict_masks(
             self,
@@ -212,18 +212,52 @@ class MaskDecoder(nn.Module):
         if self.use_beta and self.use_alpha:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             outputs = masks-beta*bg
-            return outputs, upscaled_embedding, edge_embeddings, bg, img_embedding
+            return_dict = {
+                "output": outputs,
+                "upscaled_embedding": upscaled_embedding,
+                "edge_embeddings": edge_embeddings,
+                "bg": bg,
+                "img_embedding": img_embedding,
+                "masks": masks,
+                "hyper_in": hyper_in[:, :self.num_mask_tokens],
+                "alpha": alpha,
+                "beta": beta,
+            }
+            return return_dict
         elif self.use_alpha:
-            outputs = masks
-            return outputs, upscaled_embedding, edge_embeddings, bg, img_embedding
+            return_dict = {
+                "output": masks,
+                "upscaled_embedding": upscaled_embedding,
+                "edge_embeddings": edge_embeddings,
+                "bg": bg,
+                "img_embedding": img_embedding,
+                "masks": masks,
+                "hyper_in": hyper_in[:, :self.num_mask_tokens],
+                "alpha": alpha,
+            }
+            return return_dict
         elif self.use_beta:
-            beta = self.beta_head(torch.cat([masks, bg], dim=1))
-            outputs = masks-beta*bg
-            return outputs, None, None, bg, None
+            return_dict = {
+                "output": masks-beta*bg,
+                "upscaled_embedding": upscaled_embedding,
+                "edge_embeddings": edge_embeddings,
+                "bg": bg,
+                "img_embedding": img_embedding,
+                "masks": masks,
+                "hyper_in": hyper_in[:, :self.num_mask_tokens],
+            }
+            return return_dict
         else:
-            outputs = masks
-            return outputs, None, None, bg, None
-        
+            return_dict = {
+                "output": masks,
+                "upscaled_embedding": upscaled_embedding,
+                "edge_embeddings": edge_embeddings,
+                "bg": bg,
+                "img_embedding": img_embedding,
+                "masks": masks,
+                "hyper_in": hyper_in[:, :self.num_mask_tokens],
+            }
+            return return_dict
 
 
 # Lightly adapted from

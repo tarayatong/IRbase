@@ -115,35 +115,45 @@ class Sam(nn.Module):
                 masks=image_record.get("mask_inputs", None),
             )
 
-            output, img_embed, edge_embed, bg, alpha = self.mask_decoder(
+            output_dict = self.mask_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 edge_embeddings=edge_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),
                 sparse_prompt_embeddings=sparse_embeddings,
                 dense_prompt_embeddings=dense_embeddings,
             )
-
-            outputs.append(
-                {
-                    "output": output,
-                    "img_embed": img_embed,
-                    "edge_embed": edge_embed,
-                    "bg": bg,
-                    "alpha": alpha,
-                }
-            )
+            """{
+                "upscaled_embedding": upscaled_embedding,
+                "edge_embeddings": edge_embeddings,
+                "bg": bg,
+                "img_embedding": img_embedding,
+                "masks": masks,
+                "hyper_in": hyper_in,
+                "alpha": alpha,
+                "beta": beta,
+            }"""
+            outputs.append(output_dict)
         out_maps = torch.cat([x["output"] for x in outputs], dim=0)
         bgs = torch.cat([x["bg"] for x in outputs], dim=0)
         if hasattr(self.mask_decoder, 'use_alpha') and self.mask_decoder.use_alpha:
-            img_embed = torch.cat([x["img_embed"] for x in outputs], dim=0)
-            edge_embed = torch.cat([x["edge_embed"] for x in outputs], dim=0)
+            img_embed = torch.cat([x["upscaled_embedding"] for x in outputs], dim=0)
+            edge_embed = torch.cat([x["edge_embeddings"] for x in outputs], dim=0)
             alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
+            hyper_tokens = torch.cat([x["hyper_in"] for x in outputs], dim=0)
         else:
             alphas = None
             img_embed = None
             edge_embed = None
-
-        return out_maps, img_embed, edge_embed, bgs, alphas
+            hyper_tokens = None
+        return_dict = {
+            "out_maps": out_maps,
+            "img_embed": img_embed,
+            "edge_embed": edge_embed,
+            "bgs": bgs,
+            "alpha": alphas,
+            "hyper_tokens": hyper_tokens,
+        }
+        return return_dict
 
     def postprocess_masks(
         self,
