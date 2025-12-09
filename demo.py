@@ -36,8 +36,6 @@ from utils.mask_cache import MaskCache, generate_masks_for_dataset
 from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser('HQ-SAM', add_help=False)
@@ -67,7 +65,7 @@ def get_args_parser():
 
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--visualize', action='store_true')
-    parser.add_argument("--restore-model", type=str,
+    parser.add_argument("--restore_model", default=None, type=str,
                         help="The path to the hq_decoder training checkpoint for evaluation")
 
     return parser.parse_args()
