@@ -64,8 +64,8 @@ class MaskDecoder(nn.Module):
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
-            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
-            # activation(),
+            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
@@ -87,9 +87,9 @@ class MaskDecoder(nn.Module):
             nn.GELU(),
             DySample(transformer_dim, scale=2),
             nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1),
-            # LayerNorm2d(transformer_dim//8),
-            # nn.GELU(),
-            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            LayerNorm2d(transformer_dim//8),
+            nn.GELU(),
+            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
         )
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.embedding_encoder = nn.Sequential(
@@ -237,6 +237,7 @@ class MaskDecoder(nn.Module):
             }
             return return_dict
         elif self.use_beta:
+            beta = self.beta_head(torch.cat([masks, bg], dim=1))
             return_dict = {
                 "output": masks-beta*bg,
                 "upscaled_embedding": upscaled_embedding,

@@ -61,6 +61,7 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
     bgs = out_dict.get("edge_embed")  # [b, 32, h, w]
     alpha = out_dict.get("alpha")  # [b, 32, h, w] 或 None
     hyper_tokens = out_dict.get("hyper_tokens")  # [b, 1, 32]
+    corrected_embed = out_dict.get("corrected_embed")
     
     # 检查必要的张量是否存在
     if masks is None or bgs is None or hyper_tokens is None:
@@ -70,6 +71,7 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
     masks = masks.detach()
     bgs = bgs.detach()
     hyper_tokens = hyper_tokens.detach()
+    corrected_embed = corrected_embed.detach()
     
     # 将 labels 归一化到 [0, 1] 并保持形状 [b, 1, h, w]
     y = labels_ori / 255.0  # [B, 1, H, W]
@@ -82,8 +84,7 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
         # 余弦相似度模式：直接比较 alpha 和 y_embedding
         if alpha is None:
             raise ValueError("mode='cos' 需要 alpha，但 out_dict 中 alpha 为 None")
-        p_ = alpha  # [b, 32, h, w]
-        cos_sim = F.cosine_similarity(p_, y_embedding, dim=1)  # [b, h, w]
+        cos_sim = F.cosine_similarity(corrected_embed, y_embedding, dim=1)  # [b, h, w]
         alpha_loss_val = (1 - cos_sim).mean()
         
     elif mode == 'geo':
@@ -112,18 +113,7 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
         # MSE 模式：直接比较 alpha 和 y_embedding
         if alpha is None:
             raise ValueError(f"mode='{mode}' 需要 alpha，但 out_dict 中 alpha 为 None")
-        
-        # 归一化 alpha
-        p__min = alpha.min(dim=1, keepdim=True)[0]
-        p__max = alpha.max(dim=1, keepdim=True)[0]
-        p_ = (alpha - p__min) / (p__max - p__min + 1e-8)  # [b, 32, h, w]
-        
-        # 归一化 y_embedding
-        y_min = y_embedding.min(dim=1, keepdim=True)[0]
-        y_max = y_embedding.max(dim=1, keepdim=True)[0]
-        y_norm = (y_embedding - y_min) / (y_max - y_min + 1e-8)
-        
-        alpha_loss_val = F.mse_loss(p_, y_norm)
+        alpha_loss_val = F.mse_loss(corrected_embed, y_embedding)
 
     return alpha_loss_val
 

@@ -138,6 +138,7 @@ class Sam(nn.Module):
         if hasattr(self.mask_decoder, 'use_alpha') and self.mask_decoder.use_alpha:
             img_embed = torch.cat([x["upscaled_embedding"] for x in outputs], dim=0)
             edge_embed = torch.cat([x["edge_embeddings"] for x in outputs], dim=0)
+            corrected_embed = torch.cat([x["img_embedding"] for x in outputs], dim=0)
             alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
             hyper_tokens = torch.cat([x["hyper_in"] for x in outputs], dim=0)
         else:
@@ -145,10 +146,12 @@ class Sam(nn.Module):
             img_embed = None
             edge_embed = None
             hyper_tokens = None
+            corrected_embed = None
         return_dict = {
             "out_maps": out_maps,
             "img_embed": img_embed,
             "edge_embed": edge_embed,
+            "corrected_embed": corrected_embed,
             "bgs": bgs,
             "alpha": alphas,
             "hyper_tokens": hyper_tokens,

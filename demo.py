@@ -489,10 +489,10 @@ def train(net, train_dataloaders, optimizer, criterion):
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
-            alpha_loss= AlphaLoss(out_dict, edges, labels_ori)
+            alpha_loss= AlphaLoss(out_dict, edges, labels_ori, mode='ab')
 
             # 使用Alpha损失函数
-            loss = iou_loss + 10*bce_loss + 10*edge_loss  + 0.5*alpha_loss
+            loss = iou_loss + 10*bce_loss + 10*edge_loss + alpha_loss
         elif net.mask_decoder.use_beta:
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
