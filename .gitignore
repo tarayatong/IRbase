@@ -5,6 +5,7 @@ workdir/
 *.png
 vis*
 *.tar.gz
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
