@@ -6,7 +6,6 @@ Alpha损失函数模块
 import torch
 import torch.nn.functional as F
 
-
 def compute_inverse_embedding(hyper_in_tokens, target_masks):
     """
     逆向计算 embedding：给定目标 mask，求解使得 token @ embedding = mask 的 embedding
@@ -45,7 +44,6 @@ def compute_inverse_embedding(hyper_in_tokens, target_masks):
 def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
     """
     计算 Alpha Loss
-    
     Args:
         out_dict: decoder 返回的字典，包含:
             - img_embedding: [b, 32, h, w]

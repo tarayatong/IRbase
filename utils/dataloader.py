@@ -11,7 +11,7 @@ from copy import deepcopy
 from skimage import io
 import os
 from glob import glob
-
+from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torchvision import transforms, utils
@@ -62,16 +62,20 @@ def get_im_gt_name_list(datasets, flag='train'):
 
         # Read the filenames from the corresponding txt file
         if flag == 'train':
-            list_txt = 'datasets/IRSTD-1k/trainval.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
-            list_txt = 'datasets/IRSTD-1k/test.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "test.txt")
         
         # Read the txt file containing filenames
         with open(list_txt, 'r') as f:
             filenames = f.readlines()
 
         # Construct the image paths from the filenames
-        tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in filenames]
+        if "NUDT" in datasets[i]["name"]:
+            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
+        else:
+            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
+                           filenames]
         print('-im-', datasets[i]["name"], datasets[i]["im_dir"], ': ', len(tmp_im_list))
 
         # Check if ground truth directory exists and construct the gt paths
@@ -79,10 +83,17 @@ def get_im_gt_name_list(datasets, flag='train'):
             print('-gt-', datasets[i]["name"], datasets[i]["gt_dir"], ': ', 'No Ground Truth Found')
             tmp_gt_list = []
         else:
-            tmp_gt_list = [
-                datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[0] + datasets[i]["gt_ext"]
-                for filename in filenames
-            ]
+            if "v2" in datasets[i]["name"]:
+                tmp_gt_list = [
+                    datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[
+                        0] + '_pixels0' + datasets[i]["gt_ext"]
+                    for filename in filenames
+                ]
+            else:
+                tmp_gt_list = [
+                    datasets[i]["gt_dir"] + os.sep + filename.strip().split(os.sep)[-1].split(datasets[i]["im_ext"])[0] + datasets[i]["gt_ext"]
+                    for filename in filenames
+                ]
             print('-gt-', datasets[i]["name"], datasets[i]["gt_dir"], ': ', len(tmp_gt_list))
 
         # Store image and ground truth paths in the list
@@ -125,7 +136,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
             gos_datasets.append(gos_dataset)
 
         gos_dataset = ConcatDataset(gos_datasets)
-        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers_)
+        dataloader = DataLoader(gos_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
         gos_dataloaders = dataloader
         gos_datasets = gos_dataset
@@ -134,7 +145,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
         for i in range(len(name_im_gt_list)):
             gos_dataset = OnlineDataset([name_im_gt_list[i]], transform=transforms.Compose(my_transforms),
                                         eval_ori_resolution=True, mask_cache=mask_cache)
-            dataloader = DataLoader(gos_dataset, batch_size=batch_size, num_workers=num_workers_)
+            dataloader = DataLoader(gos_dataset, batch_size=batch_size, num_workers=0)
 
             gos_dataloaders.append(dataloader)
             gos_datasets.append(gos_dataset)
@@ -368,8 +379,12 @@ class OnlineDataset(Dataset):
     def __getitem__(self, idx):
         im_path = self.dataset["im_path"][idx]
         gt_path = self.dataset["gt_path"][idx]
-        im = io.imread(im_path)
-        gt = io.imread(gt_path)
+        im = Image.open(im_path).convert('RGB')
+        im = np.array(im)
+        gt = Image.open(gt_path)
+        gt = np.array(gt)
+        # im = io.imread(im_path)
+        # gt = io.imread(gt_path)
 
         if len(gt.shape) > 2:
             gt = gt[:, :, 0]
@@ -377,6 +392,8 @@ class OnlineDataset(Dataset):
             im = im[:, :, np.newaxis]
         if im.shape[2] == 1:
             im = np.repeat(im, 3, axis=2)
+        if im.shape[2] == 4:
+            im = im[:, :, :3]
 
         # edge = cv2.Canny(gt, 100, 200)
 

@@ -248,6 +248,7 @@ class MaskDecoder(nn.Module):
                 "hyper_in": hyper_in[:, :self.num_mask_tokens],
             }
             return return_dict
+
         else:
             return_dict = {
                 "output": masks,

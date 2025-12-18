@@ -50,12 +50,11 @@ def get_args_parser():
                         help="The path to the SAM checkpoint trained with no prompt")
     parser.add_argument("--device", type=str, default="cuda",
                         help="The device to run generation on.")
-
     parser.add_argument('--learning_rate', default=1e-4, type=float)
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--lr_drop_epoch', default=50, type=int)
     parser.add_argument('--epoch_num', default=201, type=int)
-    parser.add_argument('--dataloader_size', default=[512, 512], type=list)
+    parser.add_argument('--dataloader_size', default=[256, 256], type=list)
     parser.add_argument('--batch_size_train', default=2, type=int)
     parser.add_argument('--batch_size_valid', default=1, type=int)
     parser.add_argument('--model_save_fre', default=10, type=int)
@@ -168,7 +167,7 @@ def main(valid_datasets, args):
     print(len(valid_dataloaders), " valid dataloaders created")
 
     # --- Step 3: Load pretrained Network---
-    net = build_sam_IRSAM(checkpoint=args.checkpoint, use_mask_cache=args.use_mask_cache)  # 传递use_mask_cache参数
+    net = build_sam_IRSAM(checkpoint=args.checkpoint, use_mask_cache=args.use_mask_cache, img_size=args.dataloader_size[0])  # 传递use_mask_cache参数
     if torch.cuda.is_available():
         net.cuda()
 
@@ -405,10 +404,8 @@ def evaluate(net, valid_dataloaders):
             FA, PD = Pd_Fa.get(len(valid_dataloader))
             _, IoU = IoU_metric.get()
             _, nIoU = nIoU_metric.get()
-
             tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
                                  % (IoU, nIoU, PD[0], FA[0]*1e6))
-
         metric['iou'] = IoU
         metric['niou'] = nIoU
         metric['pd'] = PD[0]
@@ -540,25 +537,28 @@ def train(net, train_dataloaders, optimizer, criterion):
 
 if __name__ == "__main__":
     # --------------- Configuring the Valid datasets ---------------
-    dataset_val_nuaa = {"name": "Sirstv2_512",
-                        "im_dir": "datasets/Sirstv2_512/test_images",
-                        "gt_dir": "datasets/Sirstv2_512/test_masks",
+    dataset_val_nuaa = {"name": "Sirstv2",
+                        "im_dir": "datasets/NUAA-SIRST/images",
+                        "gt_dir": "datasets/NUAA-SIRST/masks",
                         "im_ext": ".png",
-                        "gt_ext": ".png"}
+                        "gt_ext": ".png",
+                        "txt_dir": "datasets/NUAA-SIRST/idx_427"}
 
     dataset_val_NUDT = {"name": "NUDT",
-                        "im_dir": "datasets/NUDT-SIRST00/test_images",
-                        "gt_dir": "datasets/NUDT-SIRST00/test_masks",
+                        "im_dir": "datasets/NUDT-SIRST/images",
+                        "gt_dir": "datasets/NUDT-SIRST/masks",
                         "im_ext": ".png",
-                        "gt_ext": ".png"}
+                        "gt_ext": ".png",
+                        "txt_dir": 'datasets/NUDT-SIRST/80_20'}
 
     dataset_val_IRSTD = {"name": "IRSTD",
                          "im_dir": "datasets/IRSTD-1k/images",
                          "gt_dir": "datasets/IRSTD-1k/masks",
                          "im_ext": ".png",
-                         "gt_ext": ".png"}
+                         "gt_ext": ".png",
+                         'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_IRSTD]
+    valid_datasets = [dataset_val_NUDT]
 
     args = get_args_parser()
 
