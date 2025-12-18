@@ -486,7 +486,7 @@ def train(net, train_dataloaders, optimizer, criterion):
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
-            alpha_loss= AlphaLoss(out_dict, edges, labels_ori, mode='ab')
+            alpha_loss= AlphaLoss(out_dict, edges, labels_ori, mode='geo')
 
             # 使用Alpha损失函数
             loss = iou_loss + 10*bce_loss + 10*edge_loss + alpha_loss
@@ -558,7 +558,7 @@ if __name__ == "__main__":
                          "gt_ext": ".png",
                          'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_NUDT]
+    valid_datasets = [dataset_val_nuaa]
 
     args = get_args_parser()
 

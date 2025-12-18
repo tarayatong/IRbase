@@ -62,7 +62,7 @@ def get_im_gt_name_list(datasets, flag='train'):
 
         # Read the filenames from the corresponding txt file
         if flag == 'train':
-            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "trainval.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
             list_txt = os.path.join(datasets[i]["txt_dir"], "test.txt")
         
