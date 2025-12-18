@@ -62,7 +62,7 @@ def get_im_gt_name_list(datasets, flag='train'):
 
         # Read the filenames from the corresponding txt file
         if flag == 'train':
-            list_txt = os.path.join(datasets[i]["txt_dir"], "trainval.txt")  #'datasets/IRSTD-1k/trainval.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
             list_txt = os.path.join(datasets[i]["txt_dir"], "test.txt")
         
@@ -71,11 +71,11 @@ def get_im_gt_name_list(datasets, flag='train'):
             filenames = f.readlines()
 
         # Construct the image paths from the filenames
-        if "NUDT" in datasets[i]["name"]:
-            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
-        else:
-            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
-                           filenames]
+        # if "NUDT" in datasets[i]["name"]:
+        #     tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
+        # else:
+        tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
+                       filenames]
         print('-im-', datasets[i]["name"], datasets[i]["im_dir"], ': ', len(tmp_im_list))
 
         # Check if ground truth directory exists and construct the gt paths
@@ -122,13 +122,13 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
     if batch_size > 8:
         num_workers_ = 8
     my_transforms = []
-    if training:
-        my_transforms.append(RandomHFlip(prob=0.5))
-        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
-        # crop_size = int(img_size * random.uniform(0.8, 1.))
-        # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
-        my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
-    my_transforms.append(Resize(size=[img_size, img_size]))
+    # if training:
+    #     my_transforms.append(RandomHFlip(prob=0.5))
+    #     my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
+    #     # crop_size = int(img_size * random.uniform(0.8, 1.))
+    #     # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
+    #     my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
+    # my_transforms.append(Resize(size=[img_size, img_size]))
 
     if training:
         for i in range(len(name_im_gt_list)):

@@ -549,7 +549,7 @@ if __name__ == "__main__":
                         "gt_dir": "datasets/NUDT-SIRST/masks",
                         "im_ext": ".png",
                         "gt_ext": ".png",
-                        "txt_dir": 'datasets/NUDT-SIRST/80_20'}
+                        "txt_dir": 'datasets/NUDT-SIRST/50_50'}
 
     dataset_val_IRSTD = {"name": "IRSTD",
                          "im_dir": "datasets/IRSTD-1k/images",
@@ -558,7 +558,7 @@ if __name__ == "__main__":
                          "gt_ext": ".png",
                          'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_nuaa]
+    valid_datasets = [dataset_val_NUDT]
 
     args = get_args_parser()
 
