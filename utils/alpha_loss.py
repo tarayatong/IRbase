@@ -68,10 +68,10 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
         raise ValueError("out_dict 必须包含 'img_embedding'/'upscaled_embedding', 'edge_embeddings', 'hyper_in'")
     
     # detach 避免影响主要的梯度流
-    masks = masks.detach()
-    bgs = bgs.detach()
-    hyper_tokens = hyper_tokens.detach()
-    corrected_embed = corrected_embed.detach()
+    # masks = masks.detach()
+    # bgs = bgs.detach()
+    # hyper_tokens = hyper_tokens.detach()
+    # corrected_embed = corrected_embed.detach()
     
     # 将 labels 归一化到 [0, 1] 并保持形状 [b, 1, h, w]
     y = labels_ori / 255.0  # [B, 1, H, W]
@@ -80,40 +80,41 @@ def AlphaLoss(out_dict, edges, labels_ori, mode='geo'):
     # y_embedding 的形状: [b, 32, h, w]
     y_embedding = compute_inverse_embedding(hyper_tokens, y)
 
+    p_min = masks.min(dim=1, keepdim=True)[0]  # [b, 1, h, w]
+    p_max = masks.max(dim=1, keepdim=True)[0]  # [b, 1, h, w]
+    p = (masks - p_min) / (p_max - p_min + 1e-8)  # [b, 32, h, w]
+
+    q_min = bgs.min(dim=1, keepdim=True)[0]  # [b, 1, h, w]
+    q_max = bgs.max(dim=1, keepdim=True)[0]  # [b, 1, h, w]
+    q = (bgs - q_min) / (q_max - q_min + 1e-8)  # [b, 32, h, w]
+
+    p__min = alpha.min(dim=1, keepdim=True)[0]
+    p__max = alpha.max(dim=1, keepdim=True)[0]
+    p_ = (alpha - p__min) / (p__max - p__min + 1e-8)  # [b, 32, h, w]
+
+    y_min = y_embedding.min(dim=1, keepdim=True)[0]
+    y_max = y_embedding.max(dim=1, keepdim=True)[0]
+    y_ = (y_embedding - y_min) / (y_max - y_min + 1e-8)
+
     if mode == 'cos':
         # 余弦相似度模式：直接比较 alpha 和 y_embedding
         if alpha is None:
             raise ValueError("mode='cos' 需要 alpha，但 out_dict 中 alpha 为 None")
-        cos_sim = F.cosine_similarity(corrected_embed, y_embedding, dim=1)  # [b, h, w]
+        cos_sim = F.cosine_similarity(p_, y_, dim=1)  # [b, h, w]
         alpha_loss_val = (1 - cos_sim).mean()
         
     elif mode == 'geo':
         # 几何正交模式：要求 (y_embedding - alpha) ⊥ (masks - bgs)
         if alpha is None:
             raise ValueError("mode='geo' 需要 alpha，但 out_dict 中 alpha 为 None")
-        
-        # 归一化处理
-        p_min = masks.min(dim=1, keepdim=True)[0]  # [b, 1, h, w]
-        p_max = masks.max(dim=1, keepdim=True)[0]  # [b, 1, h, w]
-        p = (masks - p_min) / (p_max - p_min + 1e-8)  # [b, 32, h, w]
-        
-        q_min = bgs.min(dim=1, keepdim=True)[0]  # [b, 1, h, w]
-        q_max = bgs.max(dim=1, keepdim=True)[0]  # [b, 1, h, w]
-        q = (bgs - q_min) / (q_max - q_min + 1e-8)  # [b, 32, h, w]
-        
-        p__min = alpha.min(dim=1, keepdim=True)[0]
-        p__max = alpha.max(dim=1, keepdim=True)[0]
-        p_ = (alpha - p__min) / (p__max - p__min + 1e-8)  # [b, 32, h, w]
-        
-        # 正交条件: (y_embedding - p_) · (p - q) = 0
-        target1 = ((y_embedding - p_) * (p - q)).sum(dim=1, keepdim=True)  # [b, 1, h, w]
+
+        target1 = ((y_ - p_) * (p - q)).sum(dim=1, keepdim=True)  # [b, 1, h, w]
         alpha_loss_val = F.mse_loss(target1, torch.zeros_like(target1))
         
     else:
-        # MSE 模式：直接比较 alpha 和 y_embedding
         if alpha is None:
             raise ValueError(f"mode='{mode}' 需要 alpha，但 out_dict 中 alpha 为 None")
-        alpha_loss_val = F.mse_loss(corrected_embed, y_embedding)
+        alpha_loss_val = F.mse_loss(p_, y_)
 
     return alpha_loss_val
 
