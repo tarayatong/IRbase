@@ -128,7 +128,7 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
     #     # crop_size = int(img_size * random.uniform(0.8, 1.))
     #     # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
     #     my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
-    # my_transforms.append(Resize(size=[img_size, img_size]))
+    my_transforms.append(Resize(size=[img_size, img_size]))
 
     if training:
         for i in range(len(name_im_gt_list)):
@@ -401,7 +401,7 @@ class OnlineDataset(Dataset):
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         imgt = im*(gt>0)[:,:,None]
         edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
-        blurred = cv2.GaussianBlur(edge, (5, 5), 0)
+        blurred = cv2.GaussianBlur(edge, (3, 3), 0)
         edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
 
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
