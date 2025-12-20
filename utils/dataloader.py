@@ -18,6 +18,7 @@ from torchvision import transforms, utils
 from torchvision.transforms.functional import normalize
 import torch.nn.functional as F
 from torch.utils.data.distributed import DistributedSampler
+import torchvision.transforms as T
 
 
 # --------------------- dataloader online ---------------------####
@@ -124,10 +125,13 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
     my_transforms = []
     if training:
         my_transforms.append(RandomHFlip(prob=0.5))
-        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
+        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.2, prob=0.5))
         # crop_size = int(img_size * random.uniform(0.8, 1.))
         # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
-        my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.5))
+        my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.2))
+        # my_transforms.append(T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=0.2))
+        my_transforms.append(RandomSharpenOrBlur(kernel_size=3, sigma_sharp=(0.5, 1.5), amount=(0.3, 0.8), sigma_blur=(0.5, 1.5), prob=0.2))
+
     my_transforms.append(Resize(size=[img_size, img_size]))
 
     if training:
@@ -231,6 +235,58 @@ class Resize(object):
             result['path'] = path
         return result
 
+class RandomSharpenOrBlur(object):
+    def __init__(
+        self,
+        kernel_size=3,
+        sigma_sharp=(0.5, 1.5),
+        amount=(0.5, 1.0),
+        sigma_blur=(0.5, 1.5),
+        prob=0.2
+    ):
+        self.kernel_size = kernel_size
+        self.sigma_sharp = sigma_sharp
+        self.amount = amount
+        self.sigma_blur = sigma_blur
+        self.prob = prob
+
+    def __call__(self, sample):
+        imidx = sample['imidx']
+        image = sample['image']
+        label = sample['label']
+        edge = sample['edge']
+        shape = sample['shape']
+        mask_inputs = sample.get(
+            'mask_inputs',
+            torch.zeros(1, image.shape[1], image.shape[2], device=image.device)
+        )
+        path = sample.get('path', None)
+
+        if torch.rand(1) <= self.prob:
+            # 0.5 sharpen, 0.5 blur
+            if torch.rand(1) < 0.5:
+                # --- Unsharp Mask ---
+                sigma = torch.empty(1).uniform_(*self.sigma_sharp).item()
+                amount = torch.empty(1).uniform_(*self.amount).item()
+                blur = T.GaussianBlur(self.kernel_size, sigma)(image)
+                image = torch.clamp(image + amount * (image - blur), 0.0, 1.0)
+            else:
+                # --- Gaussian Blur ---
+                sigma = torch.empty(1).uniform_(*self.sigma_blur).item()
+                image = T.GaussianBlur(self.kernel_size, sigma)(image)
+
+        result = {
+            'imidx': imidx,
+            'image': image,
+            'label': label,
+            'edge': edge,
+            'shape': shape,
+            'mask_inputs': mask_inputs
+        }
+        if path is not None:
+            result['path'] = path
+
+        return result
 
 class RandomCrop(object):
     def __init__(self, crop_size=[288, 288], out_size=(512, 512), prob=0.5):
@@ -394,6 +450,10 @@ class OnlineDataset(Dataset):
             im = np.repeat(im, 3, axis=2)
         if im.shape[2] == 4:
             im = im[:, :, :3]
+
+        if im.shape[:2] != gt.shape[:2]:
+            gt.resize(im.shape[:2])
+
 
         # edge = cv2.Canny(gt, 100, 200)
 
