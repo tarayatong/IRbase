@@ -125,12 +125,12 @@ def create_dataloaders(name_im_gt_list, my_transforms=[], batch_size=1, training
     my_transforms = []
     if training:
         my_transforms.append(RandomHFlip(prob=0.5))
-        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.2, prob=0.5))
+        my_transforms.append(RandomBrightnessContrast(brightness_range=0.1, contrast_range=0.1, prob=0.5))
         # crop_size = int(img_size * random.uniform(0.8, 1.))
         # my_transforms.append(RandomCrop(crop_size=[crop_size, crop_size], out_size=(img_size, img_size), prob=0.5))
         my_transforms.append(LargeScaleJitter(output_size=img_size, aug_scale_min=0.8, aug_scale_max=1.2, prob=0.2))
         # my_transforms.append(T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=0.2))
-        my_transforms.append(RandomSharpenOrBlur(kernel_size=3, sigma_sharp=(0.5, 1.5), amount=(0.3, 0.8), sigma_blur=(0.5, 1.5), prob=0.2))
+        my_transforms.append(RandomSharpenOrBlur(kernel_size=3, sigma_sharp=(0.8, 1.2), amount=(0.3, 0.8), sigma_blur=(0.8, 1.2), prob=0.2))
 
     my_transforms.append(Resize(size=[img_size, img_size]))
 
@@ -461,8 +461,8 @@ class OnlineDataset(Dataset):
         gt_dilated = cv2.dilate(gt, kernel, iterations=1)
         imgt = im*(gt>0)[:,:,None]
         edge = cv2.Canny(im, im.mean(), imgt[imgt>0].mean()-im.mean())
-        blurred = cv2.GaussianBlur(edge, (5, 5), 0)
-        edge = (blurred>0).astype(np.float32) * (1 - gt_dilated / 255.)
+        blurred = cv2.GaussianBlur(edge, (3, 3), 0)
+        edge = ((blurred-edge)>0).astype(np.float32) * (1 - gt / 255.)
 
         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
         # tophat = cv2.morphologyEx(im, cv2.MORPH_TOPHAT, kernel)
