@@ -63,7 +63,7 @@ def get_im_gt_name_list(datasets, flag='train'):
 
         # Read the filenames from the corresponding txt file
         if flag == 'train':
-            list_txt = os.path.join(datasets[i]["txt_dir"], "trainval.txt")  #'datasets/IRSTD-1k/trainval.txt'
+            list_txt = os.path.join(datasets[i]["txt_dir"], "train.txt")  #'datasets/IRSTD-1k/trainval.txt'
         else:
             list_txt = os.path.join(datasets[i]["txt_dir"], "test.txt")
         
@@ -72,11 +72,11 @@ def get_im_gt_name_list(datasets, flag='train'):
             filenames = f.readlines()
 
         # Construct the image paths from the filenames
-        if "NUDT" in datasets[i]["name"]:
-            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
-        else:
-            tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
-                           filenames]
+        # if "NUDT" in datasets[i]["name"]:
+        #     tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() for filename in filenames]
+        # else:
+        tmp_im_list = [datasets[i]["im_dir"] + os.sep + filename.strip() + datasets[i]["im_ext"] for filename in
+                       filenames]
         print('-im-', datasets[i]["name"], datasets[i]["im_dir"], ': ', len(tmp_im_list))
 
         # Check if ground truth directory exists and construct the gt paths
