@@ -36,7 +36,6 @@ from utils.mask_cache import MaskCache, generate_masks_for_dataset
 from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
-
 def get_args_parser():
     parser = argparse.ArgumentParser('HQ-SAM', add_help=False)
 
@@ -404,7 +403,7 @@ def evaluate(net, valid_dataloaders):
             FA, PD = Pd_Fa.get(len(valid_dataloader))
             _, IoU = IoU_metric.get()
             IoU_, nIoU = nIoU_metric.get()
-            # if IoU_<0.7:
+            # if IoU_ <0.7:
             #     print(IoU_)
             tbar.set_description('IoU:%f, nIoU:%f, PD:%.8lf, FA:%.8lf'
                                  % (IoU, nIoU, PD[0], FA[0]*1e6))
@@ -487,6 +486,8 @@ def train(net, train_dataloaders, optimizer, criterion):
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["inter_masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
             alpha_loss= AlphaLoss(out_dict, edges, labels_ori, mode='geo')
 
@@ -496,12 +497,16 @@ def train(net, train_dataloaders, optimizer, criterion):
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
             loss = iou_loss + 10*bce_loss + 10*edge_loss
         else:
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             loss = iou_loss + 10*bce_loss
         loss.backward()
         optimizer.step()

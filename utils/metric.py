@@ -112,6 +112,7 @@ class PD_FA():
 
     def get(self, img_num):
 
+
         Final_FA = self.FA / ((256 * 256) * img_num)  # 512
         Final_PD = self.PD / self.target
 
