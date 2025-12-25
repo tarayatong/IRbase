@@ -77,7 +77,7 @@ class SamplewiseSigmoidMetric():
         """Gets the current evaluation result."""
         IoU = 1.0 * self.total_inter / (np.spacing(1) + self.total_union)
         mIoU = IoU.mean()
-        return IoU, mIoU
+        return IoU[-1], mIoU
 
     def reset(self):
         """Resets the internal evaluation result to initial state."""

@@ -64,8 +64,8 @@ class MaskDecoder(nn.Module):
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
             activation(),
-            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
-            activation(),
+            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            # activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
@@ -87,9 +87,9 @@ class MaskDecoder(nn.Module):
             nn.GELU(),
             DySample(transformer_dim, scale=2),
             nn.Conv2d(transformer_dim, transformer_dim // 8, kernel_size=3, padding=1),
-            LayerNorm2d(transformer_dim//8),
-            nn.GELU(),
-            nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
+            # LayerNorm2d(transformer_dim//8),
+            # nn.GELU(),
+            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
         )
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
         self.embedding_encoder = nn.Sequential(
@@ -118,20 +118,14 @@ class MaskDecoder(nn.Module):
             # nn.BatchNorm2d(1),
             nn.ReLU(),
         )
-        self.gamma_head = nn.Sequential(
-            nn.Conv2d(transformer_dim//4, transformer_dim//8, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(transformer_dim//8),
-            nn.GELU(),
-            nn.Conv2d(transformer_dim//8, transformer_dim//8, kernel_size=1, bias=False),
-            # nn.BatchNorm2d(1),
-            nn.ReLU(),
-        )
-        # self.alpha = nn.parameter(torch.ones(1,1,512,512))
         self.beta_head = nn.Sequential(
-            nn.Conv2d(2, 1, kernel_size=1),
-            nn.Sigmoid()
+            nn.Conv2d(2, 4, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.Conv2d(4, 4, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(4, 1, kernel_size=3, padding=1),
+            # nn.Sigmoid()
         )
-
     def forward(
             self,
             image_embeddings: torch.Tensor,
@@ -207,7 +201,8 @@ class MaskDecoder(nn.Module):
 
         b, c, h, w = img_embedding.shape
         masks = (hyper_in[:, :self.num_mask_tokens] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
-        bg = self.bg_head(edge_embeddings)
+        bg = (hyper_in[:, :self.num_mask_tokens] @ edge_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+        # bg = self.bg_head(edge_embeddings)
 
         if self.use_beta and self.use_alpha:
             beta = self.beta_head(torch.cat([masks, bg], dim=1))

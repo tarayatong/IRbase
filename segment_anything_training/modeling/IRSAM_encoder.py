@@ -659,7 +659,7 @@ class TinyViT(nn.Module):
 
         x = self.layers[0](x)
         start_i = 1
-        for i in range(start_i, len(self.layers)-1):
+        for i in range(start_i, len(self.layers)):
             layer = self.layers[i]
             x = layer(x)
             if i == 1:
