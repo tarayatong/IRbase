@@ -56,16 +56,17 @@ class MaskDecoder(nn.Module):
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         # 使用DySample+Conv替代ConvTranspose2d，用Sequential包装
-        self.output_upscaling = nn.Sequential(
+        self.output_upscaling_1 = nn.Sequential(
             DySample(transformer_dim, scale=2),
             nn.Conv2d(transformer_dim, transformer_dim // 4, kernel_size=3, padding=1),
             LayerNorm2d(transformer_dim // 4),
             activation(),
+        )
+        self.output_upscaling_2 = nn.Sequential(
             DySample(transformer_dim // 4, scale=2),
             nn.Conv2d(transformer_dim // 4, transformer_dim // 8, kernel_size=3, padding=1),
+            LayerNorm2d(transformer_dim // 8),
             activation(),
-            # nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=1),
-            # activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
             [
@@ -135,6 +136,12 @@ class MaskDecoder(nn.Module):
             nn.Conv2d(4, 1, kernel_size=3, padding=1),
             # nn.Sigmoid()
         )
+        self.output_upscaling = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear'),
+            nn.Conv2d(transformer_dim//4, transformer_dim//8, kernel_size=3, padding=1),
+            LayerNorm2d(transformer_dim//8),
+            nn.GELU(),
+        )
 
     def forward(
             self,
@@ -192,15 +199,16 @@ class MaskDecoder(nn.Module):
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
 
-        upscaled_embedding = self.output_upscaling(src)
+        upscaled_embedding_1 = self.output_upscaling_1(src)
+        upscaled_embedding_2 = self.output_upscaling_2(upscaled_embedding_1)
         # edge_embedding = upscalesd_embedding + edge_embeddings 
         if self.use_alpha:
-            alpha_in = torch.cat([upscaled_embedding, edge_embeddings], dim=1)
+            alpha_in = torch.cat([upscaled_embedding_2, edge_embeddings], dim=1)
             alpha = self.alpha_head(alpha_in)
             # gamma = self.gamma_head(alpha_in)
-            img_embedding = (1+alpha)*upscaled_embedding - alpha*edge_embeddings
+            img_embedding = (1+alpha)*upscaled_embedding_2 - alpha*edge_embeddings
         else:
-            img_embedding = upscaled_embedding
+            img_embedding = upscaled_embedding_2
 
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
@@ -210,8 +218,14 @@ class MaskDecoder(nn.Module):
         hyper_in = torch.stack(hyper_in_list, dim=1)
 
         b, c, h, w = img_embedding.shape
+        inter_mask_list = []
         masks = (hyper_in[:, :self.num_mask_tokens] @ img_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        inter_mask_list.append(masks)
         bg = (hyper_in[:, :self.num_mask_tokens] @ edge_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+        inter_mask1 = (hyper_in[:, :self.num_mask_tokens] @ self.output_upscaling(upscaled_embedding_1).view(b, c, h * w)).view(b, -1, h, w)
+        inter_mask_list.append(inter_mask1)
+        inter_mask2 = (hyper_in[:, :self.num_mask_tokens] @ upscaled_embedding_2.view(b, c, h * w)).view(b, -1, h, w)
+        inter_mask_list.append(inter_mask2)
         # bg = self.bg_head(edge_embeddings)
 
         if self.use_beta and self.use_alpha:
@@ -219,11 +233,11 @@ class MaskDecoder(nn.Module):
             outputs = masks-beta*bg
             return_dict = {
                 "output": outputs,
-                "upscaled_embedding": upscaled_embedding,
+                "upscaled_embedding": upscaled_embedding_2,
                 "edge_embeddings": edge_embeddings,
                 "bg": bg,
                 "img_embedding": img_embedding,
-                "masks": masks,
+                "masks": inter_mask_list,
                 "hyper_in": hyper_in[:, :self.num_mask_tokens],
                 "alpha": alpha,
                 "beta": beta,
@@ -232,11 +246,11 @@ class MaskDecoder(nn.Module):
         elif self.use_alpha:
             return_dict = {
                 "output": masks,
-                "upscaled_embedding": upscaled_embedding,
+                "upscaled_embedding": upscaled_embedding_2,
                 "edge_embeddings": edge_embeddings,
                 "bg": bg,
                 "img_embedding": img_embedding,
-                "masks": masks,
+                "masks": inter_mask_list,
                 "hyper_in": hyper_in[:, :self.num_mask_tokens],
                 "alpha": alpha,
             }
@@ -245,11 +259,11 @@ class MaskDecoder(nn.Module):
             beta = self.beta_head(torch.cat([masks, bg], dim=1))
             return_dict = {
                 "output": masks-beta*bg,
-                "upscaled_embedding": upscaled_embedding,
+                "upscaled_embedding": upscaled_embedding_2,
                 "edge_embeddings": edge_embeddings,
                 "bg": bg,
                 "img_embedding": img_embedding,
-                "masks": masks,
+                "masks": inter_mask_list,
                 "hyper_in": hyper_in[:, :self.num_mask_tokens],
             }
             return return_dict
@@ -257,11 +271,11 @@ class MaskDecoder(nn.Module):
         else:
             return_dict = {
                 "output": masks,
-                "upscaled_embedding": upscaled_embedding,
+                "upscaled_embedding": upscaled_embedding_2,
                 "edge_embeddings": edge_embeddings,
                 "bg": bg,
                 "img_embedding": img_embedding,
-                "masks": masks,
+                "masks": inter_mask_list,
                 "hyper_in": hyper_in[:, :self.num_mask_tokens],
             }
             return return_dict

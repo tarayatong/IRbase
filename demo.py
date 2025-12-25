@@ -36,7 +36,6 @@ from utils.mask_cache import MaskCache, generate_masks_for_dataset
 from utils.alpha_loss import AlphaLoss
 import utils.misc as misc
 
-
 def get_args_parser():
     parser = argparse.ArgumentParser('HQ-SAM', add_help=False)
 
@@ -487,6 +486,8 @@ def train(net, train_dataloaders, optimizer, criterion):
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["inter_masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
             alpha_loss= AlphaLoss(out_dict, edges, labels_ori, mode='geo')
 
@@ -496,12 +497,16 @@ def train(net, train_dataloaders, optimizer, criterion):
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             edge_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["bgs"]), edges)
             loss = iou_loss + 10*bce_loss + 10*edge_loss
         else:
             out_dict = net(batched_input)
             iou_loss, _ = criterion(out_dict["out_maps"], labels_ori/255.)
             bce_loss = F.binary_cross_entropy(torch.sigmoid(out_dict["out_maps"]), labels_ori/255.)
+            for mask in out_dict["masks"]:
+                bce_loss += F.binary_cross_entropy(torch.sigmoid(mask), labels_ori/255.)
             loss = iou_loss + 10*bce_loss
         loss.backward()
         optimizer.step()
@@ -560,7 +565,7 @@ if __name__ == "__main__":
                          "gt_ext": ".png",
                          'txt_dir': 'datasets/IRSTD-1k/',}
 
-    valid_datasets = [dataset_val_NUDT]
+    valid_datasets = [dataset_val_nuaa]
 
     args = get_args_parser()
 

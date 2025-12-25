@@ -141,12 +141,16 @@ class Sam(nn.Module):
             corrected_embed = torch.cat([x["img_embedding"] for x in outputs], dim=0)
             alphas = torch.cat([x["alpha"] for x in outputs], dim=0)
             hyper_tokens = torch.cat([x["hyper_in"] for x in outputs], dim=0)
+            inter_masks=[]
+            for i in range(len(outputs[0]['masks'])):
+                inter_masks.append(torch.cat([x["masks"][i] for x in outputs], dim=0))
         else:
             alphas = None
             img_embed = None
             edge_embed = None
             hyper_tokens = None
             corrected_embed = None
+            inter_masks = None
         return_dict = {
             "out_maps": out_maps,
             "img_embed": img_embed,
@@ -155,6 +159,7 @@ class Sam(nn.Module):
             "bgs": bgs,
             "alpha": alphas,
             "hyper_tokens": hyper_tokens,
+            "inter_masks": inter_masks,
         }
         return return_dict
 
